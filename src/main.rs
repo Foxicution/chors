@@ -33,9 +33,118 @@ impl Task {
     }
 }
 
+#[derive(Debug, Clone)]
 enum AppMode {
     Normal,
     AddingTask,
+}
+
+struct AppState {
+    tasks: Vec<Task>,
+    list_state: ListState,
+    mode: AppMode,
+    input: String,
+}
+
+impl AppState {
+    fn new() -> Self {
+        let mut list_state = ListState::default();
+        list_state.select(Some(0));
+        Self {
+            tasks: Vec::new(),
+            list_state,
+            mode: AppMode::Normal,
+            input: String::new(),
+        }
+    }
+
+    fn update(&mut self, event: event::Event) -> bool {
+        match event {
+            event::Event::Key(key) if key.kind == KeyEventKind::Press => match self.mode {
+                AppMode::Normal => match key.code {
+                    KeyCode::Char('q') => return false,
+                    KeyCode::Char('n') => {
+                        self.mode = AppMode::AddingTask;
+                        self.input.clear();
+                    }
+                    KeyCode::Char('c') => {
+                        if let Some(selected) = self.list_state.selected() {
+                            if let Some(task) = self.tasks.get_mut(selected) {
+                                task.completed = !task.completed;
+                            }
+                        }
+                    }
+                    KeyCode::Char('k') => {
+                        if let Some(selected) = self.list_state.selected() {
+                            let new_selected = if selected == 0 {
+                                self.tasks.len() - 1
+                            } else {
+                                selected - 1
+                            };
+                            self.list_state.select(Some(new_selected));
+                        }
+                    }
+                    KeyCode::Char('j') => {
+                        if let Some(selected) = self.list_state.selected() {
+                            let new_selected = if selected == self.tasks.len() - 1 {
+                                0
+                            } else {
+                                selected + 1
+                            };
+                            self.list_state.select(Some(new_selected));
+                        }
+                    }
+                    _ => {}
+                },
+                AppMode::AddingTask => match key.code {
+                    KeyCode::Enter => {
+                        self.tasks.push(Task::new(&self.input));
+                        self.list_state.select(Some(self.tasks.len() - 1));
+                        self.mode = AppMode::Normal;
+                    }
+                    KeyCode::Esc => {
+                        self.mode = AppMode::Normal;
+                    }
+                    KeyCode::Char(c) => {
+                        self.input.push(c);
+                    }
+                    KeyCode::Backspace => {
+                        self.input.pop();
+                    }
+                    _ => {}
+                },
+            },
+            _ => {}
+        }
+        true
+    }
+
+    fn draw(&self, frame: &mut ratatui::Frame) {
+        let size = frame.size();
+        let items: Vec<ListItem> = self
+            .tasks
+            .iter()
+            .map(|task| {
+                let status = if task.completed { "[x]" } else { "[ ]" };
+                ListItem::new(format!("{} {}", status, task.description))
+            })
+            .collect();
+
+        let list = List::new(items)
+            .block(Block::default().borders(Borders::ALL).title("Tasks"))
+            .highlight_style(Style::default().bg(Color::LightBlue));
+
+        frame.render_stateful_widget(list, size, &mut self.list_state.clone());
+
+        if let AppMode::AddingTask = self.mode {
+            let area = centered_rect(50, 20, size);
+            let input_block = Block::default().borders(Borders::ALL).title("New Task");
+            let input_paragraph = Paragraph::new(self.input.as_str())
+                .block(input_block)
+                .style(Style::default().fg(Color::Yellow));
+            frame.render_widget(input_paragraph, area);
+        }
+    }
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -70,99 +179,20 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
-    // Main loop
-    let mut tasks: Vec<Task> = Vec::new();
-    let mut list_state = ListState::default();
-    list_state.select(Some(0));
-    let mut mode = AppMode::Normal;
-    let mut input = String::new();
+    // Initial application state
+    let mut state = AppState::new();
 
     loop {
         // Drawing the UI
         terminal.draw(|frame| {
-            let size = frame.size();
-            let items: Vec<ListItem> = tasks
-                .iter()
-                .map(|task| {
-                    let status = if task.completed { "[x]" } else { "[ ]" };
-                    ListItem::new(format!("{} {}", status, task.description))
-                })
-                .collect();
-
-            let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("Tasks"))
-                .highlight_style(Style::default().bg(Color::LightBlue));
-
-            frame.render_stateful_widget(list, size, &mut list_state);
-
-            if let AppMode::AddingTask = mode {
-                let area = centered_rect(50, 20, size);
-                let input_block = Block::default().borders(Borders::ALL).title("New Task");
-                let input_paragraph = Paragraph::new(input.as_str())
-                    .block(input_block)
-                    .style(Style::default().fg(Color::Yellow));
-                frame.render_widget(input_paragraph, area);
-            }
+            state.draw(frame);
         })?;
 
         // Accepting inputs
         if event::poll(std::time::Duration::from_millis(16))? {
             if let event::Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    match mode {
-                        AppMode::Normal => match key.code {
-                            KeyCode::Char('q') => break,
-                            KeyCode::Char('n') => {
-                                mode = AppMode::AddingTask;
-                                input.clear();
-                            }
-                            KeyCode::Char('c') => {
-                                if let Some(selected) = list_state.selected() {
-                                    if let Some(task) = tasks.get_mut(selected) {
-                                        task.completed = !task.completed
-                                    }
-                                }
-                            }
-                            KeyCode::Char('k') => {
-                                if let Some(selected) = list_state.selected() {
-                                    let new_selected = if selected == 0 {
-                                        tasks.len() - 1
-                                    } else {
-                                        selected - 1
-                                    };
-                                    list_state.select(Some(new_selected));
-                                }
-                            }
-                            KeyCode::Char('j') => {
-                                if let Some(selected) = list_state.selected() {
-                                    let new_selected = if selected == tasks.len() - 1 {
-                                        0
-                                    } else {
-                                        selected + 1
-                                    };
-                                    list_state.select(Some(new_selected));
-                                }
-                            }
-                            _ => {}
-                        },
-                        AppMode::AddingTask => match key.code {
-                            KeyCode::Enter => {
-                                tasks.push(Task::new(&input));
-                                list_state.select(Some(tasks.len() - 1));
-                                mode = AppMode::Normal;
-                            }
-                            KeyCode::Esc => {
-                                mode = AppMode::Normal;
-                            }
-                            KeyCode::Char(c) => {
-                                input.push(c);
-                            }
-                            KeyCode::Backspace => {
-                                input.pop();
-                            }
-                            _ => {}
-                        },
-                    }
+                if !state.update(event::Event::Key(key)) {
+                    break;
                 }
             }
         }
