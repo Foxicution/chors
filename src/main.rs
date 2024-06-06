@@ -45,23 +45,27 @@ fn handle_key_event(app: &mut AppState, event: event::KeyEvent) -> bool {
                     }
                 }
                 KeyCode::Char('k') => {
-                    if let Some(selected) = app.list_state.selected() {
-                        let new_selected = if selected == 0 {
-                            app.tasks.len() - 1
-                        } else {
-                            selected - 1
-                        };
-                        app.list_state.select(Some(new_selected));
+                    if !app.tasks.is_empty() {
+                        if let Some(selected) = app.list_state.selected() {
+                            let new_selected = if selected == 0 {
+                                app.tasks.len() - 1
+                            } else {
+                                selected - 1
+                            };
+                            app.list_state.select(Some(new_selected));
+                        }
                     }
                 }
                 KeyCode::Char('j') => {
-                    if let Some(selected) = app.list_state.selected() {
-                        let new_selected = if selected == app.tasks.len() - 1 {
-                            0
-                        } else {
-                            selected + 1
-                        };
-                        app.list_state.select(Some(new_selected));
+                    if !app.tasks.is_empty() {
+                        if let Some(selected) = app.list_state.selected() {
+                            let new_selected = if selected == app.tasks.len() - 1 {
+                                0
+                            } else {
+                                selected + 1
+                            };
+                            app.list_state.select(Some(new_selected));
+                        }
                     }
                 }
                 _ => {}
