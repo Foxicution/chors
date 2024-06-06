@@ -1,20 +1,20 @@
 mod app;
+mod errors;
 mod ui;
 
-use crate::app::{AppMode, AppState, Task};
-use crate::ui::ui;
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
+use crate::{
+    app::{AppMode, AppState, Task},
+    errors::install_hooks,
+    ui::ui,
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io::{self, stdout};
+use color_eyre::Result;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use ratatui::Terminal;
 
 fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut AppState,
-) -> io::Result<()> {
+) -> Result<()> {
     loop {
         terminal.draw(|f| ui(f, app))?;
 
@@ -88,12 +88,9 @@ fn handle_key_event(app: &mut AppState, event: event::KeyEvent) -> bool {
     true
 }
 
-fn main() -> io::Result<()> {
-    // Terminal initialization
-    stdout().execute(EnterAlternateScreen)?;
-    enable_raw_mode()?;
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    terminal.clear()?;
+fn main() -> Result<()> {
+    install_hooks()?;
+    let mut terminal = ui::init()?;
 
     // Initial application state
     let mut app = AppState::new();
@@ -102,7 +99,6 @@ fn main() -> io::Result<()> {
     let result = run_app(&mut terminal, &mut app);
 
     // Terminal closing
-    stdout().execute(LeaveAlternateScreen)?;
-    disable_raw_mode()?;
+    ui::restore()?;
     result
 }
