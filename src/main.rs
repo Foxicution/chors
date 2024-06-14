@@ -51,6 +51,9 @@ fn handle_key_event(app: &mut AppState, event: event::KeyEvent) -> bool {
                 KeyCode::Char('j') => navigate_tasks(app, false),
                 KeyCode::Char('h') => {}
                 KeyCode::Char('l') => {}
+                KeyCode::Char('p') => {
+                    app.mode = AppMode::DebugOverlay;
+                }
                 _ => {}
             },
             AppMode::AddingTask => match event.code {
@@ -82,6 +85,20 @@ fn handle_key_event(app: &mut AppState, event: event::KeyEvent) -> bool {
                 }
                 KeyCode::Backspace => {
                     app.input.pop();
+                }
+                _ => {}
+            },
+            AppMode::DebugOverlay => match event.code {
+                KeyCode::Char('p') => {
+                    app.mode = AppMode::Normal;
+                }
+                KeyCode::Char('j') => {
+                    app.debug_scroll += 1;
+                }
+                KeyCode::Char('k') => {
+                    if app.debug_scroll > 0 {
+                        app.debug_scroll -= 1;
+                    }
                 }
                 _ => {}
             },
@@ -130,6 +147,13 @@ fn navigate_tasks(app: &mut AppState, up: bool) {
     app.list_state.select(Some(new_selected));
 }
 
+// TODO: add filters and filtered views
+// TODO: add lists (so that we can have complete separation)
+// TODO: add persistance
+// TODO: add movement operations
+// TODO: improve ui visibility (colors, etc. inspiration dooit)
+// TODO: add the ability to host from a server
+// TODO: add a web ui with iced so I can use this on the phone...
 fn main() -> Result<()> {
     install_hooks()?;
     let mut terminal = ui::init()?;

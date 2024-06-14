@@ -1,5 +1,3 @@
-use std::io::{self, stdout, Stdout};
-
 use crate::app::{AppMode, AppState, Task};
 use crossterm::{
     execute,
@@ -10,12 +8,24 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame, Terminal,
+};
+use std::{
+    collections::{HashMap, HashSet},
+    io::{self, stdout, Stdout},
 };
 use uuid::Uuid;
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
+
+struct UIList<'a> {
+    pub items: Vec<ListItem<'a>>,
+    pub nav: IndexMap<Uuid, Vec<Uuid>>,
+    pub tags: HashSet<String>,
+    pub contexts: HashSet<String>,
+}
 
 // Terminal initialization
 pub fn init() -> io::Result<Tui> {
@@ -34,10 +44,12 @@ pub fn restore() -> io::Result<()> {
 
 pub fn ui(frame: &mut Frame, app: &mut AppState) {
     let size = frame.size();
-    let (items, nav) = build_task_list(&app.tasks, Vec::new());
-    app.nav = nav;
+    let ui_list = build_task_list(&app.tasks, Vec::new());
+    app.nav = ui_list.nav;
+    app.tags = ui_list.tags;
+    app.contexts = ui_list.contexts;
 
-    let list = List::new(items)
+    let list = List::new(ui_list.items)
         .block(Block::default().borders(Borders::ALL).title(format!(
             "Tasks {:?} {:?} {:?} {:?}",
             app.list_state,
@@ -48,9 +60,22 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
             },
             app.get_task()
         )))
-        .highlight_style(Style::default().bg(Color::LightBlue));
+        .highlight_style(Style::default().bg(Color::Indexed(8)));
 
     frame.render_stateful_widget(list, size, &mut app.list_state);
+
+    if let AppMode::DebugOverlay = app.mode {
+        let debug_area = centered_rect(50, 50, size);
+        let debug_block = Block::default()
+            .borders(Borders::ALL)
+            .title("Debug Overlay");
+        let debug_content = format!("{:#?}", app); // Display app state
+        let debug_paragraph = Paragraph::new(debug_content)
+            .block(debug_block)
+            .style(Style::default().fg(Color::Red))
+            .scroll((app.debug_scroll, 0));
+        frame.render_widget(debug_paragraph, debug_area);
+    }
 
     if let AppMode::AddingTask | AppMode::AddingSubtask = app.mode {
         let area = centered_rect(50, 20, size);
@@ -67,12 +92,11 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
     }
 }
 
-fn build_task_list(
-    tasks: &IndexMap<Uuid, Task>,
-    path: Vec<Uuid>,
-) -> (Vec<ListItem>, IndexMap<Uuid, Vec<Uuid>>) {
+fn build_task_list(tasks: &IndexMap<Uuid, Task>, path: Vec<Uuid>) -> UIList {
     let mut items = Vec::new();
     let mut nav = IndexMap::new();
+    let mut tags = HashSet::new();
+    let mut contexts = HashSet::new();
 
     for task in tasks.values() {
         let mut current_path = path.clone();
@@ -80,20 +104,46 @@ fn build_task_list(
         nav.insert(task.id, current_path.clone());
 
         let indent = "  ".repeat(current_path.len() - 1);
-        let status = if task.completed { "[x]" } else { "[ ]" };
-        items.push(ListItem::new(format!(
-            "{}{} {}",
-            indent, status, task.description
-        )));
+        let status = if task.completed {
+            Span::styled("[x]", Style::default().fg(Color::Green))
+        } else {
+            Span::styled("[ ]", Style::default().fg(Color::Yellow))
+        };
+        let mut description_spans = Vec::new();
+        description_spans.push(Span::raw(format!("{} ", indent)));
+        description_spans.push(status);
+        description_spans.push(Span::raw(" "));
+
+        for word in task.description.split_whitespace() {
+            if word.starts_with('#') {
+                tags.insert(word.to_string());
+                description_spans.push(Span::styled(word, Style::default().fg(Color::Magenta)));
+            } else if word.starts_with('@') {
+                contexts.insert(word.to_string());
+                description_spans.push(Span::styled(word, Style::default().fg(Color::Cyan)));
+            } else {
+                description_spans.push(Span::raw(word));
+            }
+            description_spans.push(Span::raw(" "));
+        }
+
+        items.push(ListItem::new(Line::from(description_spans)));
 
         if !task.subtasks.is_empty() {
-            let (sub_items, sub_nav) = build_task_list(&task.subtasks, current_path);
-            items.extend(sub_items);
-            nav.extend(sub_nav);
+            let sub = build_task_list(&task.subtasks, current_path);
+            items.extend(sub.items);
+            nav.extend(sub.nav);
+            tags.extend(sub.tags);
+            contexts.extend(sub.contexts);
         }
     }
 
-    (items, nav)
+    UIList {
+        items,
+        nav,
+        tags,
+        contexts,
+    }
 }
 
 pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

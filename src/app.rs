@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
 use ratatui::widgets::ListState;
+use std::collections::HashSet;
 use uuid::{NoContext, Timestamp, Uuid};
 
 #[derive(Debug, Clone)]
@@ -8,16 +9,39 @@ pub struct Task {
     pub description: String,
     pub completed: bool,
     pub subtasks: IndexMap<Uuid, Task>,
+    pub tags: HashSet<String>,
+    pub contexts: HashSet<String>,
 }
 
 impl Task {
     pub fn new(description: &str) -> Self {
-        Task {
+        let mut task = Task {
             id: Uuid::new_v7(Timestamp::now(NoContext)),
             description: description.to_string(),
             completed: false,
             subtasks: IndexMap::new(),
+            tags: HashSet::new(),
+            contexts: HashSet::new(),
+        };
+        task.extract_tags_and_contexts();
+        task
+    }
+
+    fn extract_tags_and_contexts(&mut self) {
+        for word in self.description.split_whitespace() {
+            if word.starts_with('#') {
+                self.tags.insert(word.to_string());
+            } else if word.starts_with('@') {
+                self.contexts.insert(word.to_string());
+            }
         }
+    }
+
+    pub fn update_description(&mut self, new_description: &str) {
+        self.description = new_description.to_string();
+        self.tags.clear();
+        self.contexts.clear();
+        self.extract_tags_and_contexts();
     }
 }
 
@@ -26,8 +50,10 @@ pub enum AppMode {
     Normal,
     AddingTask,
     AddingSubtask,
+    DebugOverlay,
 }
 
+#[derive(Debug)]
 pub struct AppState {
     pub tasks: IndexMap<Uuid, Task>,
     pub list_state: ListState,
@@ -35,6 +61,10 @@ pub struct AppState {
     pub input: String,
     pub nav: IndexMap<Uuid, Vec<Uuid>>,
     pub selected: Option<Uuid>,
+    pub tags: HashSet<String>,
+    pub contexts: HashSet<String>,
+    pub autocomplete_suggestions: Vec<String>,
+    pub debug_scroll: u16,
 }
 
 impl AppState {
@@ -48,6 +78,10 @@ impl AppState {
             input: String::new(),
             nav: IndexMap::new(),
             selected: None,
+            tags: HashSet::new(),
+            contexts: HashSet::new(),
+            autocomplete_suggestions: Vec::new(),
+            debug_scroll: 0,
         }
     }
 
