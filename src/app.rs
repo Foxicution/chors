@@ -100,6 +100,7 @@ pub enum AppMode {
     DebugOverlay,
     AddingFilterCriterion,
     ViewMode,
+    Quit,
 }
 
 #[derive(Debug)]
@@ -155,90 +156,73 @@ impl AppState {
         self.current_view.filter_lists.push(filter_list);
     }
 
-    // TODO: Refactor repeating logic
-    pub fn get_task_list(&self) -> &IndexMap<Uuid, Task> {
+    fn get_path(&self) -> Vec<Uuid> {
         if let Some(selected) = self.selected {
-            let nav_path = &self.nav.get(&selected).unwrap();
-            let mut current_tasks = &self.tasks;
-            for &uuid in &nav_path[..nav_path.len() - 1] {
-                // Extract the immutable reference to subtasks
-                if current_tasks.get(&uuid).is_none() {
-                    return current_tasks;
-                }
-                current_tasks = &current_tasks[&uuid].subtasks;
-            }
-            current_tasks
+            self.nav[&selected].clone()
         } else {
-            &self.tasks
+            vec![]
         }
     }
 
-    pub fn get_task_list_mut(&mut self) -> &mut IndexMap<Uuid, Task> {
-        if let Some(selected) = self.list_state.selected() {
-            let nav_path = &self.nav[selected];
-            let mut current_tasks = &mut self.tasks;
-            for &uuid in &nav_path[..nav_path.len() - 1] {
-                // Extract the mutable reference to subtasks without keeping the mutable borrow active
-                if current_tasks.get_mut(&uuid).is_none() {
-                    return current_tasks;
-                }
-                current_tasks = &mut current_tasks[&uuid].subtasks;
-            }
-            current_tasks
-        } else {
-            &mut self.tasks
+    fn get_task_list(&self, path: &[Uuid]) -> &IndexMap<Uuid, Task> {
+        let mut current_tasks = &self.tasks;
+        for &uuid in &path[..path.len().saturating_sub(1)] {
+            current_tasks = &current_tasks[&uuid].subtasks;
         }
+        current_tasks
     }
 
-    pub fn get_task(&self) -> Option<&Task> {
-        if let Some(selected) = self.list_state.selected() {
-            let nav_path = &self.nav[selected];
-            let mut current_tasks = &self.tasks;
-            for &uuid in &nav_path[..nav_path.len() - 1] {
-                if let Some(t) = current_tasks.get(&uuid) {
-                    current_tasks = &t.subtasks;
-                } else {
-                    return None;
-                }
-            }
-            current_tasks.get(nav_path.last().unwrap())
-        } else {
-            None
+    fn get_task_list_mut(&mut self, path: &[Uuid]) -> &mut IndexMap<Uuid, Task> {
+        let mut current_tasks = &mut self.tasks;
+        for &uuid in &path[..path.len().saturating_sub(1)] {
+            current_tasks = &mut current_tasks[&uuid].subtasks;
         }
+        current_tasks
     }
 
-    pub fn get_task_mut(&mut self) -> Option<&mut Task> {
-        if let Some(selected) = self.list_state.selected() {
-            let nav_path = &self.nav[selected];
-            let mut current_tasks = &mut self.tasks;
-            for &uuid in &nav_path[..nav_path.len() - 1] {
-                if let Some(t) = current_tasks.get_mut(&uuid) {
-                    current_tasks = &mut t.subtasks;
-                } else {
-                    return None;
-                }
-            }
-            current_tasks.get_mut(nav_path.last().unwrap())
-        } else {
-            None
-        }
+    fn get_task(&self, path: &[Uuid]) -> Option<&Task> {
+        self.get_task_list(path).get(
+            path.last()
+                .expect("Path length should always be >0 when looking for a task."),
+        )
+    }
+
+    fn get_task_mut(&mut self, path: &[Uuid]) -> Option<&mut Task> {
+        self.get_task_list_mut(path).get_mut(
+            path.last()
+                .expect("Path length should always be >0 when looking for a task."),
+        )
     }
 
     pub fn add_task(&mut self) {
         let new_task = Task::new(&self.input);
         let new_id = new_task.id;
-        self.get_task_list_mut().insert(new_task.id, new_task);
+        let path = self.get_path();
+        self.get_task_list_mut(&path).insert(new_task.id, new_task);
         self.selected = Some(new_id);
     }
 
     pub fn add_subtask(&mut self) {
         let new_task = Task::new(&self.input);
         let new_id = new_task.id;
-        if let Some(task) = self.get_task_mut() {
+        let path = self.get_path();
+        if let Some(task) = self.get_task_mut(&path) {
             task.subtasks.insert(new_task.id, new_task);
             self.selected = Some(new_id);
         } else {
             todo!("Implement a message that subtask can't be added if there is no task selected!")
+        }
+    }
+
+    pub fn switch_mode(&mut self, mode: AppMode) {
+        self.mode = mode;
+        self.input.clear();
+    }
+
+    pub fn toggle_task_completion(&mut self) {
+        let path = self.get_path();
+        if let Some(task) = self.get_task_mut(&path) {
+            task.completed = !task.completed;
         }
     }
 }

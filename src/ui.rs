@@ -44,7 +44,7 @@ pub fn restore() -> io::Result<()> {
 
 pub fn ui(frame: &mut Frame, app: &mut AppState) {
     let size = frame.size();
-    let ui_list = build_task_list(&app.tasks, Vec::new(), &app.current_view);
+    let ui_list = build_task_list(&app.tasks, Vec::new(), &app.current_view, false, 0);
     app.nav = ui_list.nav;
     app.tags = ui_list.tags;
     app.contexts = ui_list.contexts;
@@ -101,6 +101,8 @@ fn build_task_list<'a>(
     tasks: &'a IndexMap<Uuid, Task>,
     path: Vec<Uuid>,
     view: &'a View,
+    parent_match: bool,
+    depth: usize,
 ) -> UIList<'a> {
     let mut items = Vec::new();
     let mut nav = IndexMap::new();
@@ -108,45 +110,30 @@ fn build_task_list<'a>(
     let mut contexts = HashSet::new();
 
     for task in tasks.values() {
-        if !view.matches(task) {
-            continue;
-        }
         let mut current_path = path.clone();
         current_path.push(task.id);
-        nav.insert(task.id, current_path.clone());
 
-        let indent = "  ".repeat(current_path.len() - 1);
-        let status = if task.completed {
-            Span::styled("[x]", Style::default().fg(Color::Green))
-        } else {
-            Span::styled("[ ]", Style::default().fg(Color::Yellow))
-        };
-        let mut description_spans = Vec::new();
-        description_spans.push(Span::raw(format!("{} ", indent)));
-        description_spans.push(status);
-        description_spans.push(Span::raw(" "));
+        if view.matches(task) | parent_match {
+            nav.insert(task.id, current_path.clone());
 
-        for word in task.description.split_whitespace() {
-            if word.starts_with('#') {
-                tags.insert(word.to_string());
-                description_spans.push(Span::styled(word, Style::default().fg(Color::Magenta)));
-            } else if word.starts_with('@') {
-                contexts.insert(word.to_string());
-                description_spans.push(Span::styled(word, Style::default().fg(Color::Cyan)));
-            } else {
-                description_spans.push(Span::raw(word));
-            }
-            description_spans.push(Span::raw(" "));
-        }
-
-        items.push(ListItem::new(Line::from(description_spans)));
-
-        if !task.subtasks.is_empty() {
-            let sub = build_task_list(&task.subtasks, current_path, view);
+            add_task_to_ui_list(task, &mut items, &mut tags, &mut contexts, depth);
+            let sub = build_task_list(&task.subtasks, current_path, view, true, depth + 1);
             items.extend(sub.items);
             nav.extend(sub.nav);
             tags.extend(sub.tags);
             contexts.extend(sub.contexts);
+        } else {
+            let sub = build_task_list(&task.subtasks, current_path, view, false, depth);
+            if !sub.items.is_empty() {
+                // let mut current_path = path.clone();
+                // current_path.push(task.id);
+                // nav.insert(task.id, current_path.clone());
+                // add_task_to_ui_list(task, &mut items, &mut tags, &mut contexts, 0);
+                items.extend(sub.items);
+                nav.extend(sub.nav);
+                tags.extend(sub.tags);
+                contexts.extend(sub.contexts);
+            }
         }
     }
 
@@ -156,6 +143,40 @@ fn build_task_list<'a>(
         tags,
         contexts,
     }
+}
+
+fn add_task_to_ui_list<'a>(
+    task: &'a Task,
+    items: &mut Vec<ListItem<'a>>,
+    tags: &mut HashSet<String>,
+    contexts: &mut HashSet<String>,
+    indent_level: usize,
+) {
+    let indent = "  ".repeat(indent_level);
+    let status = if task.completed {
+        Span::styled("[x]", Style::default().fg(Color::Green))
+    } else {
+        Span::styled("[ ]", Style::default().fg(Color::Yellow))
+    };
+    let mut description_spans = Vec::new();
+    description_spans.push(Span::raw(format!("{} ", indent)));
+    description_spans.push(status);
+    description_spans.push(Span::raw(" "));
+
+    for word in task.description.split_whitespace() {
+        if word.starts_with('#') {
+            tags.insert(word.to_string());
+            description_spans.push(Span::styled(word, Style::default().fg(Color::Magenta)));
+        } else if word.starts_with('@') {
+            contexts.insert(word.to_string());
+            description_spans.push(Span::styled(word, Style::default().fg(Color::Cyan)));
+        } else {
+            description_spans.push(Span::raw(word));
+        }
+        description_spans.push(Span::raw(" "));
+    }
+
+    items.push(ListItem::new(Line::from(description_spans)));
 }
 
 pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
