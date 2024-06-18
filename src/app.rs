@@ -46,11 +46,60 @@ impl Task {
 }
 
 #[derive(Debug, Clone)]
+pub enum Filter {
+    Completed(bool),
+    Tag(String),
+    Context(String),
+}
+
+impl Filter {
+    pub fn matches(&self, task: &Task) -> bool {
+        match self {
+            Filter::Completed(completed) => task.completed == *completed,
+            Filter::Tag(tag) => task.tags.contains(tag),
+            Filter::Context(context) => task.contexts.contains(context),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FilterList {
+    pub filters: Vec<Filter>,
+}
+
+impl FilterList {
+    pub fn matches(&self, task: &Task) -> bool {
+        if self.filters.is_empty() {
+            return true;
+        }
+        self.filters.iter().all(|filter| filter.matches(task))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct View {
+    pub filter_lists: Vec<FilterList>,
+}
+
+impl View {
+    pub fn matches(&self, task: &Task) -> bool {
+        if self.filter_lists.is_empty() {
+            return true;
+        }
+        self.filter_lists
+            .iter()
+            .any(|filter_list| filter_list.matches(task))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum AppMode {
     Normal,
     AddingTask,
     AddingSubtask,
     DebugOverlay,
+    AddingFilterCriterion,
+    ViewMode,
 }
 
 #[derive(Debug)]
@@ -65,6 +114,8 @@ pub struct AppState {
     pub contexts: HashSet<String>,
     pub autocomplete_suggestions: Vec<String>,
     pub debug_scroll: u16,
+    pub current_view: View,
+    pub saved_views: IndexMap<String, View>,
 }
 
 impl AppState {
@@ -82,28 +133,27 @@ impl AppState {
             contexts: HashSet::new(),
             autocomplete_suggestions: Vec::new(),
             debug_scroll: 0,
+            current_view: View {
+                filter_lists: Vec::new(),
+            },
+            saved_views: IndexMap::new(),
         }
     }
 
-    // Needed for later
-    // fn build_nav_list(&self, tasks: &[Task]) -> Vec<Vec<usize>> {
-    //     let mut nav = Vec::new();
-    //     let mut path = Vec::new();
-    //     self.collect_nav_list(&tasks, &mut path, &mut nav);
-    //     nav
-    // }
+    pub fn save_current_view_as_view(&mut self, name: &str) {
+        self.saved_views
+            .insert(name.to_string(), self.current_view.clone());
+    }
 
-    // fn collect_nav_list(&self, tasks: &[Task], path: &mut Vec<usize>, nav: &mut Vec<Vec<usize>>) {
-    //     for (i, task) in tasks.iter().enumerate() {
-    //         let mut current_path = path.clone();
-    //         current_path.push(i);
-    //         nav.push(current_path.clone());
+    pub fn load_view(&mut self, name: &str) {
+        if let Some(view) = self.saved_views.get(name) {
+            self.current_view = view.clone();
+        }
+    }
 
-    //         if !task.subtasks.is_empty() {
-    //             self.collect_nav_list(&task.subtasks, &mut current_path, nav);
-    //         }
-    //     }
-    // }
+    pub fn add_filter_list(&mut self, filter_list: FilterList) {
+        self.current_view.filter_lists.push(filter_list);
+    }
 
     // TODO: Refactor repeating logic
     pub fn get_task_list(&self) -> &IndexMap<Uuid, Task> {

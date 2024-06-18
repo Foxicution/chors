@@ -1,4 +1,4 @@
-use crate::app::{AppMode, AppState, Task};
+use crate::app::{AppMode, AppState, Task, View};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -13,7 +13,7 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     io::{self, stdout, Stdout},
 };
 use uuid::Uuid;
@@ -44,22 +44,13 @@ pub fn restore() -> io::Result<()> {
 
 pub fn ui(frame: &mut Frame, app: &mut AppState) {
     let size = frame.size();
-    let ui_list = build_task_list(&app.tasks, Vec::new());
+    let ui_list = build_task_list(&app.tasks, Vec::new(), &app.current_view);
     app.nav = ui_list.nav;
     app.tags = ui_list.tags;
     app.contexts = ui_list.contexts;
 
     let list = List::new(ui_list.items)
-        .block(Block::default().borders(Borders::ALL).title(format!(
-            "Tasks {:?} {:?} {:?} {:?}",
-            app.list_state,
-            app.nav,
-            match app.list_state.selected() {
-                Some(s) => Some(&app.nav[s]),
-                None => None,
-            },
-            app.get_task()
-        )))
+        .block(Block::default().borders(Borders::ALL).title("Tasks"))
         .highlight_style(Style::default().bg(Color::Indexed(8)));
 
     frame.render_stateful_widget(list, size, &mut app.list_state);
@@ -77,7 +68,21 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
         frame.render_widget(debug_paragraph, debug_area);
     }
 
-    if let AppMode::AddingTask | AppMode::AddingSubtask = app.mode {
+    if let AppMode::ViewMode = app.mode {
+        let area = centered_rect(50, 20, size);
+        let input_block = Block::default().borders(Borders::ALL).title("View Name");
+        let input_paragraph = Paragraph::new(app.input.as_str())
+            .block(input_block)
+            .style(Style::default().fg(Color::Yellow));
+        frame.render_widget(input_paragraph, area);
+
+        let cursor_x = area.x + app.input.len() as u16 + 1;
+        let cursor_y = area.y + 1;
+        frame.set_cursor(cursor_x, cursor_y);
+    }
+
+    if let AppMode::AddingTask | AppMode::AddingSubtask | AppMode::AddingFilterCriterion = app.mode
+    {
         let area = centered_rect(50, 20, size);
         let input_block = Block::default().borders(Borders::ALL).title("New Task");
         let input_paragraph = Paragraph::new(app.input.as_str())
@@ -92,13 +97,20 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
     }
 }
 
-fn build_task_list(tasks: &IndexMap<Uuid, Task>, path: Vec<Uuid>) -> UIList {
+fn build_task_list<'a>(
+    tasks: &'a IndexMap<Uuid, Task>,
+    path: Vec<Uuid>,
+    view: &'a View,
+) -> UIList<'a> {
     let mut items = Vec::new();
     let mut nav = IndexMap::new();
     let mut tags = HashSet::new();
     let mut contexts = HashSet::new();
 
     for task in tasks.values() {
+        if !view.matches(task) {
+            continue;
+        }
         let mut current_path = path.clone();
         current_path.push(task.id);
         nav.insert(task.id, current_path.clone());
@@ -130,7 +142,7 @@ fn build_task_list(tasks: &IndexMap<Uuid, Task>, path: Vec<Uuid>) -> UIList {
         items.push(ListItem::new(Line::from(description_spans)));
 
         if !task.subtasks.is_empty() {
-            let sub = build_task_list(&task.subtasks, current_path);
+            let sub = build_task_list(&task.subtasks, current_path, view);
             items.extend(sub.items);
             nav.extend(sub.nav);
             tags.extend(sub.tags);

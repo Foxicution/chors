@@ -3,7 +3,7 @@ mod errors;
 mod ui;
 
 use crate::{
-    app::{AppMode, AppState, Task},
+    app::{AppMode, AppState, Filter, FilterList},
     errors::install_hooks,
     ui::ui,
 };
@@ -40,6 +40,14 @@ fn handle_key_event(app: &mut AppState, event: event::KeyEvent) -> bool {
                 }
                 KeyCode::Char('A') => {
                     app.mode = AppMode::AddingSubtask;
+                    app.input.clear();
+                }
+                KeyCode::Char('v') => {
+                    app.mode = AppMode::ViewMode;
+                    app.input.clear();
+                }
+                KeyCode::Char('f') => {
+                    app.mode = AppMode::AddingFilterCriterion;
                     app.input.clear();
                 }
                 KeyCode::Char('c') => {
@@ -88,6 +96,54 @@ fn handle_key_event(app: &mut AppState, event: event::KeyEvent) -> bool {
                 }
                 _ => {}
             },
+            AppMode::AddingFilterCriterion => match event.code {
+                KeyCode::Enter => {
+                    let input = app.input.clone(); // Clone input to avoid borrow issues
+                    let parts: Vec<&str> = input.split_whitespace().collect();
+                    let mut filters = Vec::new();
+                    for part in parts {
+                        if part.starts_with("completed") {
+                            let value = part.split('=').nth(1).unwrap_or("false") == "true";
+                            filters.push(Filter::Completed(value));
+                        } else if part.starts_with("tag") {
+                            let tag = part.split('=').nth(1).unwrap_or("").to_string();
+                            filters.push(Filter::Tag(tag));
+                        } else if part.starts_with("context") {
+                            let context = part.split('=').nth(1).unwrap_or("").to_string();
+                            filters.push(Filter::Context(context));
+                        }
+                    }
+                    app.add_filter_list(FilterList { filters });
+                    app.mode = AppMode::Normal;
+                }
+                KeyCode::Esc => {
+                    app.mode = AppMode::Normal;
+                }
+                KeyCode::Char(c) => {
+                    app.input.push(c);
+                }
+                KeyCode::Backspace => {
+                    app.input.pop();
+                }
+                _ => {}
+            },
+            AppMode::ViewMode => match event.code {
+                KeyCode::Enter => {
+                    let input = app.input.clone(); // Clone input to avoid borrow issues
+                    app.save_current_view_as_view(&input);
+                    app.mode = AppMode::Normal;
+                }
+                KeyCode::Esc => {
+                    app.mode = AppMode::Normal;
+                }
+                KeyCode::Char(c) => {
+                    app.input.push(c);
+                }
+                KeyCode::Backspace => {
+                    app.input.pop();
+                }
+                _ => {}
+            },
             AppMode::DebugOverlay => match event.code {
                 KeyCode::Char('p') => {
                     app.mode = AppMode::Normal;
@@ -111,7 +167,7 @@ fn set_list_state(app: &mut AppState) {
     if app.nav.is_empty() {
         app.list_state.select(None);
     } else if let Some(selected) = app.selected {
-        let index = app.nav.get_index_of(&selected).unwrap_or(0);
+        let index = app.nav.get_index_of(&selected).unwrap_or(app.nav.len() - 1);
         app.list_state.select(Some(index));
     } else {
         app.list_state.select(None);
