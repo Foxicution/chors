@@ -176,6 +176,20 @@ fn add_task_to_ui_list<'a>(
         description_spans.push(Span::raw(" "));
     }
 
+    let total_subtasks = task.subtasks.len();
+    if total_subtasks > 0 {
+        let completed_subtasks = task.subtasks.values().filter(|t| t.completed).count();
+        let color = if completed_subtasks == total_subtasks {
+            Color::Green
+        } else {
+            Color::Yellow
+        };
+        description_spans.push(Span::styled(
+            format!("[{}/{}]", completed_subtasks, total_subtasks),
+            Style::default().fg(color),
+        ));
+    }
+
     items.push(ListItem::new(Line::from(description_spans)));
 }
 

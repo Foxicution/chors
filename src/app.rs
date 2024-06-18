@@ -157,10 +157,9 @@ impl AppState {
     }
 
     fn get_path(&self) -> Vec<Uuid> {
-        if let Some(selected) = self.selected {
-            self.nav[&selected].clone()
-        } else {
-            vec![]
+        match self.selected {
+            Some(selected) => self.nav[&selected].clone(),
+            None => vec![],
         }
     }
 
@@ -181,17 +180,17 @@ impl AppState {
     }
 
     fn get_task(&self, path: &[Uuid]) -> Option<&Task> {
-        self.get_task_list(path).get(
-            path.last()
-                .expect("Path length should always be >0 when looking for a task."),
-        )
+        match path.last() {
+            Some(last) => self.get_task_list(path).get(last),
+            None => None,
+        }
     }
 
     fn get_task_mut(&mut self, path: &[Uuid]) -> Option<&mut Task> {
-        self.get_task_list_mut(path).get_mut(
-            path.last()
-                .expect("Path length should always be >0 when looking for a task."),
-        )
+        match path.last() {
+            Some(last) => self.get_task_list_mut(path).get_mut(last),
+            None => None,
+        }
     }
 
     pub fn add_task(&mut self) {
@@ -223,6 +222,28 @@ impl AppState {
         let path = self.get_path();
         if let Some(task) = self.get_task_mut(&path) {
             task.completed = !task.completed;
+            toggle_subtasks_completion(task);
+            self.update_parent_task_completion(&path);
         }
+    }
+
+    fn update_parent_task_completion(&mut self, path: &[Uuid]) {
+        if path.len() <= 1 {
+            return; // No parent task
+        }
+
+        let parent_path = &path[..path.len() - 1];
+        if let Some(parent_task) = self.get_task_mut(parent_path) {
+            let all_subtasks_completed = parent_task.subtasks.values().all(|t| t.completed);
+            parent_task.completed = all_subtasks_completed;
+            self.update_parent_task_completion(parent_path);
+        }
+    }
+}
+
+fn toggle_subtasks_completion(task: &mut Task) {
+    for subtask in task.subtasks.values_mut() {
+        subtask.completed = task.completed;
+        toggle_subtasks_completion(subtask);
     }
 }
