@@ -190,6 +190,13 @@ fn navigate_tasks(app: &mut AppState, up: bool) {
     app.list_state.select(Some(new_selected));
 }
 
+// TODO: add better movement (jump to the start/end, specific line)
+// TODO: add task editing (moving up/down a scope, moving in out, yanking and pasting, selecting, etc.)
+// TODO: add lists (so that we can have complete separation)
+// TODO: add persistance
+// TODO: improve ui visibility (colors, etc. inspiration dooit)
+// TODO: add the ability to host from a server
+// TODO: add a web ui with iced so I can use this on the phone...
 fn main() -> Result<()> {
     install_hooks()?;
     let mut terminal = ui::init()?;
