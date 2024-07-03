@@ -95,6 +95,37 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
         let cursor_y = area.y + 1; // +1 for the border offset
         frame.set_cursor(cursor_x, cursor_y);
     }
+
+    if let AppMode::Navigation = app.mode {
+        let navigation_width = 30;
+        let navigation_height = 6;
+        let area = Rect::new(
+            size.width.saturating_sub(navigation_width + 1), // +1 for border
+            size.height.saturating_sub(navigation_height + 1), // +1 for border
+            navigation_width,
+            navigation_height,
+        );
+
+        let navigation_block = Block::default().borders(Borders::ALL).title("Navigation");
+        let navigation_text = vec![
+            Line::from(vec![
+                Span::raw("Go to line: "),
+                Span::styled(&app.navigation_input, Style::default().fg(Color::Yellow)),
+            ]),
+            Line::from(Span::raw("Options:")),
+            Line::from(Span::raw("<n>g: Go to line <n>")),
+            Line::from(Span::raw("e: Go to last line")),
+        ];
+        let navigation_paragraph = Paragraph::new(navigation_text)
+            .block(navigation_block)
+            .style(Style::default().fg(Color::White));
+        frame.render_widget(navigation_paragraph, area);
+
+        // Position the cursor at the end of the navigation input
+        let cursor_x = area.x + app.navigation_input.len() as u16 + 13; // 13 is the length of "Go to line: "
+        let cursor_y = area.y + 1;
+        frame.set_cursor(cursor_x, cursor_y);
+    }
 }
 
 fn build_task_list<'a>(

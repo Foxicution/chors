@@ -39,6 +39,7 @@ fn handle_key_event(app: &mut AppState, event: event::KeyEvent) {
             AppMode::AddingFilterCriterion => handle_adding_filter_mode(app, event),
             AppMode::ViewMode => handle_view_mode(app, event),
             AppMode::DebugOverlay => handle_debug_overlay_mode(app, event),
+            AppMode::Navigation => handle_navigation_mode(app, event),
             AppMode::Quit => {}
         }
     }
@@ -55,6 +56,20 @@ fn handle_normal_mode(app: &mut AppState, event: event::KeyEvent) {
         KeyCode::Char('k') => navigate_tasks(app, true),
         KeyCode::Char('j') => navigate_tasks(app, false),
         KeyCode::Char('p') => app.switch_mode(AppMode::DebugOverlay),
+        KeyCode::Char('g') => app.switch_mode(AppMode::Navigation),
+        _ => {}
+    }
+}
+
+fn handle_navigation_mode(app: &mut AppState, event: event::KeyEvent) {
+    match event.code {
+        KeyCode::Char('g') => app.handle_navigation(),
+        KeyCode::Char('e') => app.jump_to_end(),
+        KeyCode::Char(c) if c.is_ascii_digit() => app.navigation_input.push(c),
+        KeyCode::Backspace => {
+            app.navigation_input.pop();
+        }
+        KeyCode::Esc => app.exit_navigation_mode(),
         _ => {}
     }
 }

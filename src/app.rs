@@ -100,6 +100,7 @@ pub enum AppMode {
     DebugOverlay,
     AddingFilterCriterion,
     ViewMode,
+    Navigation,
     Quit,
 }
 
@@ -117,6 +118,7 @@ pub struct AppState {
     pub debug_scroll: u16,
     pub current_view: View,
     pub saved_views: IndexMap<String, View>,
+    pub navigation_input: String,
 }
 
 impl AppState {
@@ -138,6 +140,7 @@ impl AppState {
                 filter_lists: Vec::new(),
             },
             saved_views: IndexMap::new(),
+            navigation_input: String::new(),
         }
     }
 
@@ -216,6 +219,7 @@ impl AppState {
     pub fn switch_mode(&mut self, mode: AppMode) {
         self.mode = mode;
         self.input.clear();
+        self.navigation_input.clear();
     }
 
     pub fn toggle_task_completion(&mut self) {
@@ -238,6 +242,40 @@ impl AppState {
             parent_task.completed = all_subtasks_completed;
             self.update_parent_task_completion(parent_path);
         }
+    }
+
+    pub fn exit_navigation_mode(&mut self) {
+        self.mode = AppMode::Normal;
+        self.navigation_input.clear();
+    }
+
+    pub fn handle_navigation(&mut self) {
+        if self.navigation_input.is_empty() {
+            self.jump_to_line(0);
+        } else if let Ok(line) = self.navigation_input.parse::<usize>() {
+            self.jump_to_line(line.saturating_sub(1));
+        }
+        self.exit_navigation_mode();
+    }
+
+    fn jump_to_line(&mut self, line: usize) {
+        let max_line = self.nav.len().saturating_sub(1);
+        let target_line = line.min(max_line);
+        if let Some((id, _)) = self.nav.get_index(target_line) {
+            self.selected = Some(*id);
+            self.list_state.select(Some(target_line));
+        }
+    }
+
+    pub fn jump_to_end(&mut self) {
+        if !self.nav.is_empty() {
+            let last_index = self.nav.len() - 1;
+            if let Some((id, _)) = self.nav.get_index(last_index) {
+                self.selected = Some(*id);
+                self.list_state.select(Some(last_index));
+            }
+        }
+        self.exit_navigation_mode();
     }
 }
 
