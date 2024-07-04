@@ -37,7 +37,7 @@ impl Task {
         }
     }
 
-    pub fn update_description(&mut self, new_description: &str) {
+    fn update_description(&mut self, new_description: &str) {
         self.description = new_description.to_string();
         self.tags.clear();
         self.contexts.clear();
@@ -93,22 +93,22 @@ impl View {
 }
 
 #[derive(Debug, Clone)]
-pub enum AppMode {
+pub enum Mode {
     Normal,
     AddingTask,
     AddingSubtask,
     DebugOverlay,
     AddingFilterCriterion,
-    ViewMode,
+    View,
     Navigation,
     Quit,
 }
 
 #[derive(Debug)]
-pub struct AppState {
+pub struct Model {
     pub tasks: IndexMap<Uuid, Task>,
     pub list_state: ListState,
-    pub mode: AppMode,
+    pub mode: Mode,
     pub input: String,
     pub nav: IndexMap<Uuid, Vec<Uuid>>,
     pub selected: Option<Uuid>,
@@ -121,14 +121,14 @@ pub struct AppState {
     pub navigation_input: String,
 }
 
-impl AppState {
+impl Model {
     pub fn new() -> Self {
         let mut list_state = ListState::default();
         list_state.select(None);
         Self {
             tasks: IndexMap::new(),
             list_state,
-            mode: AppMode::Normal,
+            mode: Mode::Normal,
             input: String::new(),
             nav: IndexMap::new(),
             selected: None,
@@ -144,22 +144,7 @@ impl AppState {
         }
     }
 
-    pub fn save_current_view_as_view(&mut self, name: &str) {
-        self.saved_views
-            .insert(name.to_string(), self.current_view.clone());
-    }
-
-    pub fn load_view(&mut self, name: &str) {
-        if let Some(view) = self.saved_views.get(name) {
-            self.current_view = view.clone();
-        }
-    }
-
-    pub fn add_filter_list(&mut self, filter_list: FilterList) {
-        self.current_view.filter_lists.push(filter_list);
-    }
-
-    fn get_path(&self) -> Vec<Uuid> {
+    pub fn get_path(&self) -> Vec<Uuid> {
         match self.selected {
             Some(selected) => self.nav[&selected].clone(),
             None => vec![],
@@ -174,7 +159,7 @@ impl AppState {
         current_tasks
     }
 
-    fn get_task_list_mut(&mut self, path: &[Uuid]) -> &mut IndexMap<Uuid, Task> {
+    pub fn get_task_list_mut(&mut self, path: &[Uuid]) -> &mut IndexMap<Uuid, Task> {
         let mut current_tasks = &mut self.tasks;
         for &uuid in &path[..path.len().saturating_sub(1)] {
             current_tasks = &mut current_tasks[&uuid].subtasks;
@@ -189,7 +174,7 @@ impl AppState {
         }
     }
 
-    fn get_task_mut(&mut self, path: &[Uuid]) -> Option<&mut Task> {
+    pub fn get_task_mut(&mut self, path: &[Uuid]) -> Option<&mut Task> {
         match path.last() {
             Some(last) => self.get_task_list_mut(path).get_mut(last),
             None => None,
@@ -215,73 +200,29 @@ impl AppState {
             todo!("Implement a message that subtask can't be added if there is no task selected!")
         }
     }
-
-    pub fn switch_mode(&mut self, mode: AppMode) {
-        self.mode = mode;
-        self.input.clear();
-        self.navigation_input.clear();
-    }
-
-    pub fn toggle_task_completion(&mut self) {
-        let path = self.get_path();
-        if let Some(task) = self.get_task_mut(&path) {
-            task.completed = !task.completed;
-            toggle_subtasks_completion(task);
-            self.update_parent_task_completion(&path);
-        }
-    }
-
-    fn update_parent_task_completion(&mut self, path: &[Uuid]) {
-        if path.len() <= 1 {
-            return; // No parent task
-        }
-
-        let parent_path = &path[..path.len() - 1];
-        if let Some(parent_task) = self.get_task_mut(parent_path) {
-            let all_subtasks_completed = parent_task.subtasks.values().all(|t| t.completed);
-            parent_task.completed = all_subtasks_completed;
-            self.update_parent_task_completion(parent_path);
-        }
-    }
-
-    pub fn exit_navigation_mode(&mut self) {
-        self.mode = AppMode::Normal;
-        self.navigation_input.clear();
-    }
-
-    pub fn handle_navigation(&mut self) {
-        if self.navigation_input.is_empty() {
-            self.jump_to_line(0);
-        } else if let Ok(line) = self.navigation_input.parse::<usize>() {
-            self.jump_to_line(line.saturating_sub(1));
-        }
-        self.exit_navigation_mode();
-    }
-
-    fn jump_to_line(&mut self, line: usize) {
-        let max_line = self.nav.len().saturating_sub(1);
-        let target_line = line.min(max_line);
-        if let Some((id, _)) = self.nav.get_index(target_line) {
-            self.selected = Some(*id);
-            self.list_state.select(Some(target_line));
-        }
-    }
-
-    pub fn jump_to_end(&mut self) {
-        if !self.nav.is_empty() {
-            let last_index = self.nav.len() - 1;
-            if let Some((id, _)) = self.nav.get_index(last_index) {
-                self.selected = Some(*id);
-                self.list_state.select(Some(last_index));
-            }
-        }
-        self.exit_navigation_mode();
-    }
 }
 
-fn toggle_subtasks_completion(task: &mut Task) {
-    for subtask in task.subtasks.values_mut() {
-        subtask.completed = task.completed;
-        toggle_subtasks_completion(subtask);
-    }
+#[derive(Debug, Clone)]
+pub enum Direction {
+    Up,
+    Down,
+}
+
+#[derive(Debug, Clone)]
+pub enum Msg {
+    NoOp,
+    Quit,
+    PushChar(char),
+    PopChar,
+    AddTask,
+    AddSubtask,
+    ToggleTaskCompletion,
+    SwitchMode(Mode),
+    NavigateTasks(Direction),
+    ScrollDebug(Direction),
+    HandleNavigation,
+    JumpToEnd,
+    AddFilterCriterion,
+    SaveCurrentView(String),
+    LoadView(String),
 }

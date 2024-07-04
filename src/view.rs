@@ -1,4 +1,4 @@
-use crate::app::{AppMode, AppState, Task, View};
+use crate::model::{Mode, Model, Task, View};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -42,7 +42,7 @@ pub fn restore() -> io::Result<()> {
     Ok(())
 }
 
-pub fn ui(frame: &mut Frame, app: &mut AppState) {
+pub fn ui(frame: &mut Frame, app: &mut Model) {
     let size = frame.size();
     let ui_list = build_task_list(&app.tasks, Vec::new(), &app.current_view, false, 0);
     app.nav = ui_list.nav;
@@ -55,7 +55,7 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
 
     frame.render_stateful_widget(list, size, &mut app.list_state);
 
-    if let AppMode::DebugOverlay = app.mode {
+    if let Mode::DebugOverlay = app.mode {
         let debug_area = centered_rect(50, 50, size);
         let debug_block = Block::default()
             .borders(Borders::ALL)
@@ -68,7 +68,7 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
         frame.render_widget(debug_paragraph, debug_area);
     }
 
-    if let AppMode::ViewMode = app.mode {
+    if let Mode::View = app.mode {
         let area = centered_rect(50, 20, size);
         let input_block = Block::default().borders(Borders::ALL).title("View Name");
         let input_paragraph = Paragraph::new(app.input.as_str())
@@ -81,8 +81,7 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
         frame.set_cursor(cursor_x, cursor_y);
     }
 
-    if let AppMode::AddingTask | AppMode::AddingSubtask | AppMode::AddingFilterCriterion = app.mode
-    {
+    if let Mode::AddingTask | Mode::AddingSubtask | Mode::AddingFilterCriterion = app.mode {
         let area = centered_rect(50, 20, size);
         let input_block = Block::default().borders(Borders::ALL).title("New Task");
         let input_paragraph = Paragraph::new(app.input.as_str())
@@ -96,7 +95,7 @@ pub fn ui(frame: &mut Frame, app: &mut AppState) {
         frame.set_cursor(cursor_x, cursor_y);
     }
 
-    if let AppMode::Navigation = app.mode {
+    if let Mode::Navigation = app.mode {
         let navigation_width = 30;
         let navigation_height = 6;
         let area = Rect::new(
