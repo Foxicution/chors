@@ -1,9 +1,10 @@
 use indexmap::IndexMap;
 use ratatui::widgets::ListState;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::{NoContext, Timestamp, Uuid};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: Uuid,
     pub description: String,
@@ -45,7 +46,7 @@ impl Task {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Filter {
     Completed(bool),
     Tag(String),
@@ -62,7 +63,7 @@ impl Filter {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterList {
     pub filters: Vec<Filter>,
 }
@@ -76,7 +77,7 @@ impl FilterList {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct View {
     pub filter_lists: Vec<FilterList>,
 }
@@ -92,7 +93,7 @@ impl View {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Mode {
     Normal,
     AddingTask,
@@ -104,9 +105,10 @@ pub enum Mode {
     Quit,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
     pub tasks: IndexMap<Uuid, Task>,
+    #[serde(with = "list_state_serde")]
     pub list_state: ListState,
     pub mode: Mode,
     pub input: String,
@@ -225,4 +227,46 @@ pub enum Msg {
     AddFilterCriterion,
     SaveCurrentView(String),
     LoadView(String),
+}
+
+mod list_state_serde {
+    use super::ListState;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct SerializableListState {
+        selected: Option<usize>,
+    }
+
+    impl From<ListState> for SerializableListState {
+        fn from(state: ListState) -> Self {
+            Self {
+                selected: state.selected(),
+            }
+        }
+    }
+
+    impl From<SerializableListState> for ListState {
+        fn from(state: SerializableListState) -> Self {
+            let mut list_state = ListState::default();
+            list_state.select(state.selected);
+            list_state
+        }
+    }
+
+    pub fn serialize<S>(state: &ListState, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let serializable_state = SerializableListState::from(state.clone());
+        serializable_state.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<ListState, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let serializable_state = SerializableListState::deserialize(deserializer)?;
+        Ok(ListState::from(serializable_state))
+    }
 }

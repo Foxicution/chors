@@ -1,3 +1,4 @@
+mod cli;
 mod errors;
 mod model;
 mod update;
@@ -11,6 +12,7 @@ use crate::{
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
+use std::{fs, path::Path};
 
 fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
@@ -78,7 +80,7 @@ fn key_event_to_msg(model: &Model, key: KeyCode) -> Msg {
         },
         Mode::Navigation => match key {
             KeyCode::Char('g') => Msg::HandleNavigation,
-            KeyCode::Char('G') => Msg::JumpToEnd,
+            KeyCode::Char('e') => Msg::JumpToEnd,
             KeyCode::Char(c) if c.is_ascii_digit() => Msg::PushChar(c),
             KeyCode::Backspace => Msg::PopChar,
             KeyCode::Esc => Msg::SwitchMode(Mode::Normal),
@@ -88,23 +90,45 @@ fn key_event_to_msg(model: &Model, key: KeyCode) -> Msg {
     }
 }
 
+// TODO: add persistance
 // TODO: add task editing (moving up/down a scope, moving in out, yanking and pasting, selecting, etc.)
 // TODO: add lists (so that we can have complete separation)
-// TODO: add persistance
 // TODO: improve ui visibility (colors, etc. inspiration dooit)
 // TODO: add the ability to host from a server
 // TODO: add a web ui with iced so I can use this on the phone...
 fn main() -> Result<()> {
     install_hooks()?;
+
+    let matches = cli::build_cli().get_matches();
+    let file_path = matches.get_one::<String>("file");
+
     let mut terminal = view::init()?;
 
-    // Initial application state
-    let mut model = Model::new();
+    // Load application state
+    let mut model = if let Some(file_path) = file_path {
+        if Path::new(file_path).exists() {
+            let data = fs::read_to_string(file_path)?;
+            let mut model: Model = serde_json::from_str(&data)?;
+            model.mode = Mode::Normal;
+            model
+        } else {
+            Model::new()
+        }
+    } else {
+        Model::new()
+    };
 
     // Run the application
     let result = run_app(&mut terminal, &mut model);
 
     // Terminal closing
     view::restore()?;
+
+    // Save application state if a file path was provided
+    if let Some(file_path) = file_path {
+        let data = serde_json::to_string_pretty(&model)?;
+        fs::write(file_path, data)?;
+    }
+
     result
 }
