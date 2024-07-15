@@ -48,6 +48,7 @@ fn key_event_to_msg(model: &Model, key: KeyCode) -> Msg {
             KeyCode::Char('j') => Msg::NavigateTasks(Direction::Down),
             KeyCode::Char('p') => Msg::SwitchMode(Mode::DebugOverlay),
             KeyCode::Char('g') => Msg::SwitchMode(Mode::Navigation),
+            KeyCode::Char('C') => Msg::SwitchMode(Mode::Calendar),
             _ => Msg::NoOp,
         },
         Mode::AddingTask | Mode::AddingSubtask | Mode::AddingFilterCriterion => match key {
@@ -86,16 +87,20 @@ fn key_event_to_msg(model: &Model, key: KeyCode) -> Msg {
             KeyCode::Esc => Msg::SwitchMode(Mode::Normal),
             _ => Msg::NoOp,
         },
+        Mode::Calendar => match key {
+            KeyCode::Char('C') => Msg::SwitchMode(Mode::Normal),
+            _ => Msg::NoOp,
+        },
         Mode::Quit => Msg::Quit,
     }
 }
 
-// TODO: add persistance
+// TODO: add a calendar and time to tasks
 // TODO: add task editing (moving up/down a scope, moving in out, yanking and pasting, selecting, etc.)
 // TODO: add lists (so that we can have complete separation)
 // TODO: improve ui visibility (colors, etc. inspiration dooit)
-// TODO: add the ability to host from a server
 // TODO: add a web ui with iced so I can use this on the phone...
+// TODO: add the ability to host from a server
 fn main() -> Result<()> {
     install_hooks()?;
 

@@ -1,4 +1,5 @@
 use crate::model::{Mode, Model, Task, View};
+use chrono::Datelike;
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -6,7 +7,7 @@ use crossterm::{
 use indexmap::IndexMap;
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
@@ -53,7 +54,11 @@ pub fn ui(frame: &mut Frame, app: &mut Model) {
         .block(Block::default().borders(Borders::ALL).title("Tasks"))
         .highlight_style(Style::default().bg(Color::Indexed(8)));
 
-    frame.render_stateful_widget(list, size, &mut app.list_state);
+    if let Mode::Calendar = app.mode {
+        render_calendar_view(frame, app, size)
+    } else {
+        frame.render_stateful_widget(list, size, &mut app.list_state);
+    }
 
     if let Mode::DebugOverlay = app.mode {
         let debug_area = centered_rect(50, 50, size);
@@ -206,6 +211,20 @@ fn add_task_to_ui_list<'a>(
         description_spans.push(Span::raw(" "));
     }
 
+    if let Some(start_time) = task.start_time {
+        description_spans.push(Span::styled(
+            format!("[Start: {}]", start_time.format("%Y-%m-%d %H:%M")),
+            Style::default().fg(Color::Blue),
+        ));
+    }
+
+    if let Some(due_time) = task.due_time {
+        description_spans.push(Span::styled(
+            format!("[Due: {}]", due_time.format("%Y-%m-%d %H:%M")),
+            Style::default().fg(Color::Red),
+        ));
+    }
+
     let total_subtasks = task.subtasks.len();
     if total_subtasks > 0 {
         let completed_subtasks = task.subtasks.values().filter(|t| t.completed).count();
@@ -246,4 +265,132 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             .as_ref(),
         )
         .split(popup_layout[1])[1]
+}
+
+fn render_calendar_view(frame: &mut Frame, app: &Model, size: Rect) {
+    let calendar_area = centered_rect(80, 80, size);
+    let calendar_block = Block::default()
+        .borders(Borders::ALL)
+        .title("Calendar View");
+    frame.render_widget(calendar_block, calendar_area);
+
+    // Call the render_calendar function we defined earlier
+    render_calendar(frame, app, calendar_area);
+}
+
+fn render_calendar(frame: &mut Frame, app: &Model, area: Rect) {
+    let now = chrono::Local::now();
+    let (year, month, today) = (now.year(), now.month(), now.day());
+    let days_in_month = days_in_month(year, month);
+
+    let calendar_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .split(area);
+
+    let header =
+        Paragraph::new(format!("{} {}", month_name(month), year)).alignment(Alignment::Center);
+    frame.render_widget(header, calendar_layout[0]);
+
+    let calendar_area = calendar_layout[1];
+    let day_width = calendar_area.width / 7;
+    let day_height = calendar_area.height / 6;
+
+    for week in 0..6 {
+        for day in 0..7 {
+            let day_number = week * 7 + day + 1;
+            if day_number <= days_in_month {
+                let day_area = Rect::new(
+                    calendar_area.x + (day as u16) * day_width,
+                    calendar_area.y + (week as u16) * day_height,
+                    day_width,
+                    day_height,
+                );
+
+                let mut style = Style::default();
+                if day_number == today {
+                    style = style.bg(Color::Blue);
+                }
+
+                let day_block = Block::default().borders(Borders::ALL).style(style);
+                frame.render_widget(day_block, day_area);
+
+                let day_text = Paragraph::new(day_number.to_string()).alignment(Alignment::Center);
+                frame.render_widget(day_text, day_area);
+
+                // Here, you would render tasks for this day
+                // You'll need to implement a function to get tasks for a specific day
+                render_tasks_for_day(frame, app, day_area, year, month, day_number);
+            }
+        }
+    }
+}
+
+fn render_tasks_for_day(
+    frame: &mut Frame,
+    app: &Model,
+    area: Rect,
+    year: i32,
+    month: u32,
+    day: u32,
+) {
+    let tasks_for_day = app.tasks.values().filter(|task| {
+        if let Some(start_time) = task.start_time {
+            start_time.year() == year && start_time.month() == month && start_time.day() == day
+        } else {
+            false
+        }
+    });
+
+    let task_area = Rect::new(area.x + 1, area.y + 2, area.width - 2, area.height - 3);
+    let task_list: Vec<ListItem> = tasks_for_day
+        .take((task_area.height as usize).saturating_sub(1))
+        .map(|task| {
+            ListItem::new(Span::styled(
+                task.description
+                    .chars()
+                    .take(task_area.width as usize)
+                    .collect::<String>(),
+                Style::default().fg(Color::Yellow),
+            ))
+        })
+        .collect();
+
+    let tasks_list = List::new(task_list);
+    frame.render_widget(tasks_list, task_area);
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    chrono::NaiveDate::from_ymd_opt(
+        match month {
+            12 => year + 1,
+            _ => year,
+        },
+        match month {
+            12 => 1,
+            _ => month + 1,
+        },
+        1,
+    )
+    .unwrap()
+    .signed_duration_since(chrono::NaiveDate::from_ymd_opt(year, month, 1).unwrap())
+    .num_days() as u32
+}
+
+fn month_name(month: u32) -> &'static str {
+    match month {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => unreachable!(),
+    }
 }

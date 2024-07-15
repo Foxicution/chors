@@ -11,6 +11,8 @@ pub fn update(msg: Msg, model: &mut Model) {
             let path = model.get_path();
             model.get_task_list_mut(&path).insert(new_task.id, new_task);
             model.selected = Some(new_id);
+            let current_index = model.nav.get_index_of(&new_id).unwrap_or(0);
+            model.list_state.select(Some(current_index));
             model.input.clear();
             model.mode = Mode::Normal;
         }
@@ -21,6 +23,8 @@ pub fn update(msg: Msg, model: &mut Model) {
             if let Some(task) = model.get_task_mut(&path) {
                 task.subtasks.insert(new_task.id, new_task);
                 model.selected = Some(new_id);
+                let current_index = model.nav.get_index_of(&new_id).unwrap_or(0);
+                model.list_state.select(Some(current_index));
                 model.input.clear();
             }
             model.mode = Mode::Normal;

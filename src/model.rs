@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use indexmap::IndexMap;
 use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,8 @@ pub struct Task {
     pub subtasks: IndexMap<Uuid, Task>,
     pub tags: HashSet<String>,
     pub contexts: HashSet<String>,
+    pub start_time: Option<DateTime<Local>>,
+    pub due_time: Option<DateTime<Local>>,
 }
 
 impl Task {
@@ -23,6 +26,8 @@ impl Task {
             subtasks: IndexMap::new(),
             tags: HashSet::new(),
             contexts: HashSet::new(),
+            start_time: None,
+            due_time: None,
         };
         task.extract_tags_and_contexts();
         task
@@ -102,6 +107,8 @@ pub enum Mode {
     AddingFilterCriterion,
     View,
     Navigation,
+    Calendar,
+    Help,
     Quit,
 }
 
