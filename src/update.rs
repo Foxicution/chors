@@ -1,4 +1,4 @@
-use crate::model::{Direction, Filter, FilterList, Mode, Model, Msg, Task};
+use crate::model::{Direction, Filter, FilterList, Mode, Model, Msg, Overlay, Task};
 use uuid::Uuid;
 
 pub fn update(msg: Msg, model: &mut Model) {
@@ -14,7 +14,7 @@ pub fn update(msg: Msg, model: &mut Model) {
             let current_index = model.nav.get_index_of(&new_id).unwrap_or(0);
             model.list_state.select(Some(current_index));
             model.input.clear();
-            model.mode = Mode::Normal;
+            model.overlay = Overlay::None;
         }
         Msg::AddSubtask => {
             let new_task = Task::new(&model.input);
@@ -27,7 +27,7 @@ pub fn update(msg: Msg, model: &mut Model) {
                 model.list_state.select(Some(current_index));
                 model.input.clear();
             }
-            model.mode = Mode::Normal;
+            model.overlay = Overlay::None;
         }
         Msg::ToggleTaskCompletion => {
             let path = model.get_path();
@@ -39,6 +39,13 @@ pub fn update(msg: Msg, model: &mut Model) {
         }
         Msg::SwitchMode(new_mode) => {
             model.mode = new_mode;
+            model.overlay = Overlay::None;
+            model.input.clear();
+            model.navigation_input.clear();
+            model.debug_scroll = 0;
+        }
+        Msg::SetOverlay(new_overlay) => {
+            model.overlay = new_overlay;
             model.input.clear();
             model.navigation_input.clear();
             model.debug_scroll = 0;
@@ -72,7 +79,7 @@ pub fn update(msg: Msg, model: &mut Model) {
             } else if let Ok(line) = model.navigation_input.parse::<usize>() {
                 jump_to_line(model, line.saturating_sub(1));
             }
-            model.mode = Mode::Normal;
+            model.overlay = Overlay::None;
             model.navigation_input.clear();
         }
         Msg::JumpToEnd => {
@@ -83,7 +90,7 @@ pub fn update(msg: Msg, model: &mut Model) {
                     model.list_state.select(Some(last_index));
                 }
             }
-            model.mode = Mode::Normal;
+            model.overlay = Overlay::None;
             model.navigation_input.clear();
         }
         Msg::PushChar(ch) => model.input.push(ch),
@@ -108,7 +115,7 @@ pub fn update(msg: Msg, model: &mut Model) {
                 })
                 .collect();
             model.current_view.filter_lists.push(FilterList { filters });
-            model.mode = Mode::Normal;
+            model.overlay = Overlay::None;
         }
         Msg::SaveCurrentView(view_name) => {
             model

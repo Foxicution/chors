@@ -100,16 +100,21 @@ impl View {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Mode {
-    Normal,
+    List,
+    Calendar,
+    Quit,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Overlay {
+    None,
     AddingTask,
     AddingSubtask,
-    DebugOverlay,
     AddingFilterCriterion,
     View,
     Navigation,
-    Calendar,
     Help,
-    Quit,
+    Debug,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +123,7 @@ pub struct Model {
     #[serde(with = "list_state_serde")]
     pub list_state: ListState,
     pub mode: Mode,
+    pub overlay: Overlay,
     pub input: String,
     pub nav: IndexMap<Uuid, Vec<Uuid>>,
     pub selected: Option<Uuid>,
@@ -137,7 +143,8 @@ impl Model {
         Self {
             tasks: IndexMap::new(),
             list_state,
-            mode: Mode::Normal,
+            mode: Mode::List,
+            overlay: Overlay::None,
             input: String::new(),
             nav: IndexMap::new(),
             selected: None,
@@ -227,6 +234,7 @@ pub enum Msg {
     AddSubtask,
     ToggleTaskCompletion,
     SwitchMode(Mode),
+    SetOverlay(Overlay),
     NavigateTasks(Direction),
     ScrollDebug(Direction),
     HandleNavigation,

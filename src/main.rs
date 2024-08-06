@@ -11,6 +11,7 @@ use crate::{
 };
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use model::Overlay;
 use ratatui::Terminal;
 use std::{fs, path::Path};
 
@@ -36,62 +37,71 @@ fn run_app<B: ratatui::backend::Backend>(
 }
 
 fn key_event_to_msg(model: &Model, key: KeyCode) -> Msg {
-    match model.mode {
-        Mode::Normal => match key {
-            KeyCode::Char('q') => Msg::SwitchMode(Mode::Quit),
-            KeyCode::Char('a') => Msg::SwitchMode(Mode::AddingTask),
-            KeyCode::Char('A') => Msg::SwitchMode(Mode::AddingSubtask),
-            KeyCode::Char('v') => Msg::SwitchMode(Mode::View),
-            KeyCode::Char('f') => Msg::SwitchMode(Mode::AddingFilterCriterion),
-            KeyCode::Char('c') => Msg::ToggleTaskCompletion,
-            KeyCode::Char('k') => Msg::NavigateTasks(Direction::Up),
-            KeyCode::Char('j') => Msg::NavigateTasks(Direction::Down),
-            KeyCode::Char('p') => Msg::SwitchMode(Mode::DebugOverlay),
-            KeyCode::Char('g') => Msg::SwitchMode(Mode::Navigation),
-            KeyCode::Char('C') => Msg::SwitchMode(Mode::Calendar),
-            _ => Msg::NoOp,
+    match model.overlay {
+        Overlay::None => match model.mode {
+            Mode::List => match key {
+                KeyCode::Char('q') => Msg::SwitchMode(Mode::Quit),
+                KeyCode::Char('a') => Msg::SetOverlay(Overlay::AddingTask),
+                KeyCode::Char('A') => Msg::SetOverlay(Overlay::AddingSubtask),
+                KeyCode::Char('v') => Msg::SetOverlay(Overlay::View),
+                KeyCode::Char('f') => Msg::SetOverlay(Overlay::AddingFilterCriterion),
+                KeyCode::Char('c') => Msg::ToggleTaskCompletion,
+                KeyCode::Char('k') => Msg::NavigateTasks(Direction::Up),
+                KeyCode::Char('j') => Msg::NavigateTasks(Direction::Down),
+                KeyCode::Char('p') => Msg::SetOverlay(Overlay::Debug),
+                KeyCode::Char('g') => Msg::SetOverlay(Overlay::Navigation),
+                KeyCode::Char('C') => Msg::SwitchMode(Mode::Calendar),
+                KeyCode::Char('?') => Msg::SetOverlay(Overlay::Help),
+                _ => Msg::NoOp,
+            },
+            Mode::Calendar => match key {
+                KeyCode::Char('C') => Msg::SwitchMode(Mode::List),
+                _ => Msg::NoOp,
+            },
+            Mode::Quit => Msg::Quit,
         },
-        Mode::AddingTask | Mode::AddingSubtask | Mode::AddingFilterCriterion => match key {
-            KeyCode::Enter => {
-                if let Mode::AddingTask = model.mode {
-                    Msg::AddTask
-                } else if let Mode::AddingSubtask = model.mode {
-                    Msg::AddSubtask
-                } else {
-                    Msg::AddFilterCriterion
+        Overlay::AddingTask | Overlay::AddingSubtask | Overlay::AddingFilterCriterion => {
+            match key {
+                KeyCode::Enter => {
+                    if let Overlay::AddingTask = model.overlay {
+                        Msg::AddTask
+                    } else if let Overlay::AddingSubtask = model.overlay {
+                        Msg::AddSubtask
+                    } else {
+                        Msg::AddFilterCriterion
+                    }
                 }
+                KeyCode::Esc => Msg::SetOverlay(Overlay::None),
+                KeyCode::Char(c) => Msg::PushChar(c),
+                KeyCode::Backspace => Msg::PopChar,
+                _ => Msg::NoOp,
             }
-            KeyCode::Esc => Msg::SwitchMode(Mode::Normal),
-            KeyCode::Char(c) => Msg::PushChar(c),
-            KeyCode::Backspace => Msg::PopChar,
-            _ => Msg::NoOp,
-        },
-        Mode::View => match key {
+        }
+        Overlay::View => match key {
             KeyCode::Enter => Msg::SaveCurrentView(model.input.clone()),
-            KeyCode::Esc => Msg::SwitchMode(Mode::Normal),
+            KeyCode::Esc => Msg::SetOverlay(Overlay::None),
             KeyCode::Char(c) => Msg::PushChar(c),
             KeyCode::Backspace => Msg::PopChar,
             _ => Msg::NoOp,
         },
-        Mode::DebugOverlay => match key {
-            KeyCode::Char('p') => Msg::SwitchMode(Mode::Normal),
+        Overlay::Debug => match key {
+            KeyCode::Char('p') => Msg::SetOverlay(Overlay::None),
             KeyCode::Char('j') => Msg::ScrollDebug(Direction::Down),
             KeyCode::Char('k') => Msg::ScrollDebug(Direction::Up),
             _ => Msg::NoOp,
         },
-        Mode::Navigation => match key {
+        Overlay::Navigation => match key {
             KeyCode::Char('g') => Msg::HandleNavigation,
             KeyCode::Char('e') => Msg::JumpToEnd,
             KeyCode::Char(c) if c.is_ascii_digit() => Msg::PushChar(c),
             KeyCode::Backspace => Msg::PopChar,
-            KeyCode::Esc => Msg::SwitchMode(Mode::Normal),
+            KeyCode::Esc => Msg::SetOverlay(Overlay::None),
             _ => Msg::NoOp,
         },
-        Mode::Calendar => match key {
-            KeyCode::Char('C') => Msg::SwitchMode(Mode::Normal),
+        Overlay::Help => match key {
+            KeyCode::Esc => Msg::SetOverlay(Overlay::None),
             _ => Msg::NoOp,
         },
-        Mode::Quit => Msg::Quit,
     }
 }
 
@@ -114,7 +124,7 @@ fn main() -> Result<()> {
         if Path::new(file_path).exists() {
             let data = fs::read_to_string(file_path)?;
             let mut model: Model = serde_json::from_str(&data)?;
-            model.mode = Mode::Normal;
+            model.mode = Mode::List;
             model
         } else {
             Model::new()

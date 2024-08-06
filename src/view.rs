@@ -1,4 +1,4 @@
-use crate::model::{Mode, Model, Task, View};
+use crate::model::{Mode, Model, Overlay, Task, View};
 use chrono::Datelike;
 use crossterm::{
     execute,
@@ -28,6 +28,154 @@ struct UIList<'a> {
     pub contexts: HashSet<String>,
 }
 
+pub fn ui(frame: &mut Frame, app: &mut Model) {
+    let size = frame.size();
+
+    match app.mode {
+        Mode::List => render_list_mode(frame, app, size),
+        Mode::Calendar => render_calendar_mode(frame, app, size),
+        Mode::Quit => {}
+    }
+
+    match app.overlay {
+        Overlay::None => {}
+        Overlay::AddingTask | Overlay::AddingSubtask | Overlay::AddingFilterCriterion => {
+            render_input_overlay(frame, app, size)
+        }
+        Overlay::View => render_view_overlay(frame, app, size),
+        Overlay::Navigation => render_navigation_overlay(frame, app, size),
+        Overlay::Help => render_help_overlay(frame, size),
+        Overlay::Debug => render_debug_overlay(frame, size),
+    }
+}
+
+fn render_list_mode(frame: &mut Frame, app: &mut Model, size: Rect) {
+    let ui_list = build_task_list(&app.tasks, Vec::new(), &app.current_view, false, 0);
+    app.nav = ui_list.nav;
+    app.tags = ui_list.tags;
+    app.contexts = ui_list.contexts;
+
+    let list = List::new(ui_list.items)
+        .block(Block::default().borders(Borders::ALL).title("Tasks"))
+        .highlight_style(Style::default().bg(Color::Indexed(8)));
+
+    frame.render_stateful_widget(list, size, &mut app.list_state);
+}
+
+fn render_input_overlay(frame: &mut Frame, app: &Model, size: Rect) {
+    let area = centered_rect(50, 20, size);
+    let input_block = Block::default().borders(Borders::ALL).title("New Task");
+    let input_paragraph = Paragraph::new(app.input.as_str())
+        .block(input_block)
+        .style(Style::default().fg(Color::Yellow));
+    frame.render_widget(input_paragraph, area);
+
+    let cursor_x = area.x + app.input.len() as u16 + 1;
+    let cursor_y = area.y + 1;
+    frame.set_cursor(cursor_x, cursor_y);
+}
+
+fn render_view_overlay(frame: &mut Frame, app: &Model, size: Rect) {
+    let area = centered_rect(50, 20, size);
+    let input_block = Block::default().borders(Borders::ALL).title("View Name");
+    let input_paragraph = Paragraph::new(app.input.as_str())
+        .block(input_block)
+        .style(Style::default().fg(Color::Yellow));
+    frame.render_widget(input_paragraph, area);
+
+    let cursor_x = area.x + app.input.len() as u16 + 1;
+    let cursor_y = area.y + 1;
+    frame.set_cursor(cursor_x, cursor_y);
+}
+
+fn render_navigation_overlay(frame: &mut Frame, app: &Model, size: Rect) {
+    let navigation_width = 30;
+    let navigation_height = 6;
+    let area = Rect::new(
+        size.width.saturating_sub(navigation_width + 1),
+        size.height.saturating_sub(navigation_height + 1),
+        navigation_width,
+        navigation_height,
+    );
+
+    let navigation_block = Block::default().borders(Borders::ALL).title("Navigation");
+    let navigation_text = vec![
+        Line::from(vec![
+            Span::raw("Go to line: "),
+            Span::styled(&app.navigation_input, Style::default().fg(Color::Yellow)),
+        ]),
+        Line::from(Span::raw("Options:")),
+        Line::from(Span::raw("<n>g: Go to line <n>")),
+        Line::from(Span::raw("e: Go to last line")),
+    ];
+    let navigation_paragraph = Paragraph::new(navigation_text)
+        .block(navigation_block)
+        .style(Style::default().fg(Color::White));
+    frame.render_widget(navigation_paragraph, area);
+
+    let cursor_x = area.x + app.navigation_input.len() as u16 + 13;
+    let cursor_y = area.y + 1;
+    frame.set_cursor(cursor_x, cursor_y);
+}
+
+fn render_help_overlay(frame: &mut Frame, size: Rect) {
+    let help_area = centered_rect(50, 50, size);
+    let help_block = Block::default()
+        .borders(Borders::ALL)
+        .title("Help - Key Bindings");
+
+    let help_text = vec![
+        Line::from(Span::raw("q: Quit")),
+        Line::from(Span::raw("a: Add Task")),
+        Line::from(Span::raw("A: Add Subtask")),
+        Line::from(Span::raw("v: View Mode")),
+        Line::from(Span::raw("f: Add Filter Criterion")),
+        Line::from(Span::raw("c: Toggle Task Completion")),
+        Line::from(Span::raw("k: Navigate Up")),
+        Line::from(Span::raw("j: Navigate Down")),
+        Line::from(Span::raw("p: Debug Overlay")),
+        Line::from(Span::raw("g: Navigation Mode")),
+        Line::from(Span::raw("C: Calendar Mode")),
+        Line::from(Span::raw("?: Show Help")),
+        Line::from(Span::raw("Esc: Return to Normal Mode")),
+    ];
+
+    let help_paragraph = Paragraph::new(help_text)
+        .block(help_block)
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(help_paragraph, help_area);
+}
+
+fn render_debug_overlay(frame: &mut Frame, size: Rect) {
+    let help_area = centered_rect(50, 50, size);
+    let help_block = Block::default()
+        .borders(Borders::ALL)
+        .title("Help - Key Bindings");
+
+    let help_text = vec![
+        Line::from(Span::raw("q: Quit")),
+        Line::from(Span::raw("a: Add Task")),
+        Line::from(Span::raw("A: Add Subtask")),
+        Line::from(Span::raw("v: View Mode")),
+        Line::from(Span::raw("f: Add Filter Criterion")),
+        Line::from(Span::raw("c: Toggle Task Completion")),
+        Line::from(Span::raw("k: Navigate Up")),
+        Line::from(Span::raw("j: Navigate Down")),
+        Line::from(Span::raw("p: Debug Overlay")),
+        Line::from(Span::raw("g: Navigation Mode")),
+        Line::from(Span::raw("C: Calendar Mode")),
+        Line::from(Span::raw("?: Show Help")),
+        Line::from(Span::raw("Esc: Return to Normal Mode")),
+    ];
+
+    let help_paragraph = Paragraph::new(help_text)
+        .block(help_block)
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(help_paragraph, help_area);
+}
+
 // Terminal initialization
 pub fn init() -> io::Result<Tui> {
     execute!(stdout(), EnterAlternateScreen)?;
@@ -41,95 +189,6 @@ pub fn restore() -> io::Result<()> {
     execute!(stdout(), LeaveAlternateScreen)?;
     disable_raw_mode()?;
     Ok(())
-}
-
-pub fn ui(frame: &mut Frame, app: &mut Model) {
-    let size = frame.size();
-    let ui_list = build_task_list(&app.tasks, Vec::new(), &app.current_view, false, 0);
-    app.nav = ui_list.nav;
-    app.tags = ui_list.tags;
-    app.contexts = ui_list.contexts;
-
-    let list = List::new(ui_list.items)
-        .block(Block::default().borders(Borders::ALL).title("Tasks"))
-        .highlight_style(Style::default().bg(Color::Indexed(8)));
-
-    if let Mode::Calendar = app.mode {
-        render_calendar_view(frame, app, size)
-    } else {
-        frame.render_stateful_widget(list, size, &mut app.list_state);
-    }
-
-    if let Mode::DebugOverlay = app.mode {
-        let debug_area = centered_rect(50, 50, size);
-        let debug_block = Block::default()
-            .borders(Borders::ALL)
-            .title("Debug Overlay");
-        let debug_content = format!("{:#?}", app); // Display app state
-        let debug_paragraph = Paragraph::new(debug_content)
-            .block(debug_block)
-            .style(Style::default().fg(Color::Red))
-            .scroll((app.debug_scroll, 0));
-        frame.render_widget(debug_paragraph, debug_area);
-    }
-
-    if let Mode::View = app.mode {
-        let area = centered_rect(50, 20, size);
-        let input_block = Block::default().borders(Borders::ALL).title("View Name");
-        let input_paragraph = Paragraph::new(app.input.as_str())
-            .block(input_block)
-            .style(Style::default().fg(Color::Yellow));
-        frame.render_widget(input_paragraph, area);
-
-        let cursor_x = area.x + app.input.len() as u16 + 1;
-        let cursor_y = area.y + 1;
-        frame.set_cursor(cursor_x, cursor_y);
-    }
-
-    if let Mode::AddingTask | Mode::AddingSubtask | Mode::AddingFilterCriterion = app.mode {
-        let area = centered_rect(50, 20, size);
-        let input_block = Block::default().borders(Borders::ALL).title("New Task");
-        let input_paragraph = Paragraph::new(app.input.as_str())
-            .block(input_block)
-            .style(Style::default().fg(Color::Yellow));
-        frame.render_widget(input_paragraph, area);
-
-        // Position the cursor at the end of the input text
-        let cursor_x = area.x + app.input.len() as u16 + 1; // +1 for the border offset
-        let cursor_y = area.y + 1; // +1 for the border offset
-        frame.set_cursor(cursor_x, cursor_y);
-    }
-
-    if let Mode::Navigation = app.mode {
-        let navigation_width = 30;
-        let navigation_height = 6;
-        let area = Rect::new(
-            size.width.saturating_sub(navigation_width + 1), // +1 for border
-            size.height.saturating_sub(navigation_height + 1), // +1 for border
-            navigation_width,
-            navigation_height,
-        );
-
-        let navigation_block = Block::default().borders(Borders::ALL).title("Navigation");
-        let navigation_text = vec![
-            Line::from(vec![
-                Span::raw("Go to line: "),
-                Span::styled(&app.navigation_input, Style::default().fg(Color::Yellow)),
-            ]),
-            Line::from(Span::raw("Options:")),
-            Line::from(Span::raw("<n>g: Go to line <n>")),
-            Line::from(Span::raw("e: Go to last line")),
-        ];
-        let navigation_paragraph = Paragraph::new(navigation_text)
-            .block(navigation_block)
-            .style(Style::default().fg(Color::White));
-        frame.render_widget(navigation_paragraph, area);
-
-        // Position the cursor at the end of the navigation input
-        let cursor_x = area.x + app.navigation_input.len() as u16 + 13; // 13 is the length of "Go to line: "
-        let cursor_y = area.y + 1;
-        frame.set_cursor(cursor_x, cursor_y);
-    }
 }
 
 fn build_task_list<'a>(
@@ -267,7 +326,7 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn render_calendar_view(frame: &mut Frame, app: &Model, size: Rect) {
+fn render_calendar_mode(frame: &mut Frame, app: &Model, size: Rect) {
     let calendar_area = centered_rect(80, 80, size);
     let calendar_block = Block::default()
         .borders(Borders::ALL)
