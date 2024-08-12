@@ -326,15 +326,14 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn render_calendar_mode(frame: &mut Frame, app: &Model, size: Rect) {
-    let calendar_area = centered_rect(80, 80, size);
+fn render_calendar_mode(frame: &mut Frame, app: &Model, area: Rect) {
     let calendar_block = Block::default()
         .borders(Borders::ALL)
         .title("Calendar View");
-    frame.render_widget(calendar_block, calendar_area);
+    frame.render_widget(calendar_block, area);
 
     // Call the render_calendar function we defined earlier
-    render_calendar(frame, app, calendar_area);
+    render_calendar(frame, app, area);
 }
 
 fn render_calendar(frame: &mut Frame, app: &Model, area: Rect) {
