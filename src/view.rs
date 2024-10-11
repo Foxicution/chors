@@ -10,7 +10,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame, Terminal,
 };
 use std::{
@@ -28,67 +28,128 @@ struct UIList<'a> {
     pub contexts: HashSet<String>,
 }
 
-pub fn ui(frame: &mut Frame, app: &mut Model) {
+pub fn ui(frame: &mut Frame, model: &mut Model) {
     let size = frame.size();
+    let available_height = size.height.saturating_sub(2);
 
-    match app.mode {
-        Mode::List => render_list_mode(frame, app, size),
-        Mode::Calendar => render_calendar_mode(frame, app, size),
+    match model.mode {
+        Mode::List => render_list_mode(
+            frame,
+            model,
+            Rect::new(size.x, size.y, size.width, available_height),
+        ),
+        Mode::Calendar => render_calendar_mode(
+            frame,
+            model,
+            Rect::new(size.x, size.y, size.width, available_height),
+        ),
         Mode::Quit => {}
     }
 
-    match app.overlay {
+    match model.overlay {
         Overlay::None => {}
         Overlay::AddingTask | Overlay::AddingSubtask | Overlay::AddingFilterCriterion => {
-            render_input_overlay(frame, app, size)
+            render_input_overlay(
+                frame,
+                model,
+                Rect::new(size.x, size.y, size.width, available_height),
+            )
         }
-        Overlay::View => render_view_overlay(frame, app, size),
-        Overlay::Navigation => render_navigation_overlay(frame, app, size),
-        Overlay::Help => render_help_overlay(frame, size),
-        Overlay::Debug => render_debug_overlay(frame, size),
+        Overlay::View => render_view_overlay(
+            frame,
+            model,
+            Rect::new(size.x, size.y, size.width, available_height),
+        ),
+        Overlay::Navigation => render_navigation_overlay(
+            frame,
+            model,
+            Rect::new(size.x, size.y, size.width, available_height),
+        ),
+        Overlay::Help => render_help_overlay(
+            frame,
+            Rect::new(size.x, size.y, size.width, available_height),
+        ),
+        Overlay::Debug => render_debug_overlay(
+            frame,
+            model,
+            Rect::new(size.x, size.y, size.width, available_height),
+        ),
     }
+
+    render_taskbar(frame, model, size);
 }
 
-fn render_list_mode(frame: &mut Frame, app: &mut Model, size: Rect) {
-    let ui_list = build_task_list(&app.tasks, Vec::new(), &app.current_view, false, 0);
-    app.nav = ui_list.nav;
-    app.tags = ui_list.tags;
-    app.contexts = ui_list.contexts;
+fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
+    let taskbar_height = 2; // Two lines for taskbar
+    let info_height = 1;
+    let input_height = 1;
 
+    let info_area = Rect::new(
+        size.x,
+        size.height - taskbar_height,
+        size.width,
+        info_height,
+    );
+    let input_area = Rect::new(size.x, size.height - input_height, size.width, input_height);
+
+    let info_paragraph = Paragraph::new(Span::from(model.taskbar_info.clone()))
+        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+
+    let input_text = if model.command_input.starts_with(':') {
+        model.command_input.clone()
+    } else {
+        model.taskbar_message.clone()
+    };
+
+    let input_paragraph = Paragraph::new(Span::from(input_text));
+
+    frame.render_widget(info_paragraph, info_area);
+    frame.render_widget(input_paragraph, input_area);
+}
+
+fn render_list_mode(frame: &mut Frame, model: &mut Model, size: Rect) {
+    let ui_list = build_task_list(&model.tasks, Vec::new(), &model.current_view, false, 0);
+    model.nav = ui_list.nav;
+    model.tags = ui_list.tags;
+    model.contexts = ui_list.contexts;
+
+    // TODO: make these wrap into the area at some point (right now they cut off)
     let list = List::new(ui_list.items)
         .block(Block::default().borders(Borders::ALL).title("Tasks"))
         .highlight_style(Style::default().bg(Color::Indexed(8)));
 
-    frame.render_stateful_widget(list, size, &mut app.list_state);
+    frame.render_stateful_widget(list, size, &mut model.list_state);
 }
 
-fn render_input_overlay(frame: &mut Frame, app: &Model, size: Rect) {
+// TODO: swap this to tui-textarea at some point
+fn render_input_overlay(frame: &mut Frame, model: &Model, size: Rect) {
     let area = centered_rect(50, 20, size);
     let input_block = Block::default().borders(Borders::ALL).title("New Task");
-    let input_paragraph = Paragraph::new(app.input.as_str())
+    let input_paragraph = Paragraph::new(model.input.as_str())
         .block(input_block)
-        .style(Style::default().fg(Color::Yellow));
+        .style(Style::default().fg(Color::Yellow))
+        .wrap(Wrap { trim: false });
     frame.render_widget(input_paragraph, area);
 
-    let cursor_x = area.x + app.input.len() as u16 + 1;
+    let cursor_x = area.x + model.input.len() as u16 + 1;
     let cursor_y = area.y + 1;
     frame.set_cursor(cursor_x, cursor_y);
 }
 
-fn render_view_overlay(frame: &mut Frame, app: &Model, size: Rect) {
+fn render_view_overlay(frame: &mut Frame, model: &Model, size: Rect) {
     let area = centered_rect(50, 20, size);
     let input_block = Block::default().borders(Borders::ALL).title("View Name");
-    let input_paragraph = Paragraph::new(app.input.as_str())
+    let input_paragraph = Paragraph::new(model.input.as_str())
         .block(input_block)
         .style(Style::default().fg(Color::Yellow));
     frame.render_widget(input_paragraph, area);
 
-    let cursor_x = area.x + app.input.len() as u16 + 1;
+    let cursor_x = area.x + model.input.len() as u16 + 1;
     let cursor_y = area.y + 1;
     frame.set_cursor(cursor_x, cursor_y);
 }
 
-fn render_navigation_overlay(frame: &mut Frame, app: &Model, size: Rect) {
+fn render_navigation_overlay(frame: &mut Frame, model: &Model, size: Rect) {
     let navigation_width = 30;
     let navigation_height = 6;
     let area = Rect::new(
@@ -102,7 +163,7 @@ fn render_navigation_overlay(frame: &mut Frame, app: &Model, size: Rect) {
     let navigation_text = vec![
         Line::from(vec![
             Span::raw("Go to line: "),
-            Span::styled(&app.navigation_input, Style::default().fg(Color::Yellow)),
+            Span::styled(&model.navigation_input, Style::default().fg(Color::Yellow)),
         ]),
         Line::from(Span::raw("Options:")),
         Line::from(Span::raw("<n>g: Go to line <n>")),
@@ -113,7 +174,7 @@ fn render_navigation_overlay(frame: &mut Frame, app: &Model, size: Rect) {
         .style(Style::default().fg(Color::White));
     frame.render_widget(navigation_paragraph, area);
 
-    let cursor_x = area.x + app.navigation_input.len() as u16 + 13;
+    let cursor_x = area.x + model.navigation_input.len() as u16 + 13;
     let cursor_y = area.y + 1;
     frame.set_cursor(cursor_x, cursor_y);
 }
@@ -147,33 +208,17 @@ fn render_help_overlay(frame: &mut Frame, size: Rect) {
     frame.render_widget(help_paragraph, help_area);
 }
 
-fn render_debug_overlay(frame: &mut Frame, size: Rect) {
-    let help_area = centered_rect(50, 50, size);
-    let help_block = Block::default()
+fn render_debug_overlay(frame: &mut Frame, model: &mut Model, size: Rect) {
+    let debug_area = centered_rect(50, 50, size);
+    let debug_block = Block::default()
         .borders(Borders::ALL)
-        .title("Help - Key Bindings");
-
-    let help_text = vec![
-        Line::from(Span::raw("q: Quit")),
-        Line::from(Span::raw("a: Add Task")),
-        Line::from(Span::raw("A: Add Subtask")),
-        Line::from(Span::raw("v: View Mode")),
-        Line::from(Span::raw("f: Add Filter Criterion")),
-        Line::from(Span::raw("c: Toggle Task Completion")),
-        Line::from(Span::raw("k: Navigate Up")),
-        Line::from(Span::raw("j: Navigate Down")),
-        Line::from(Span::raw("p: Debug Overlay")),
-        Line::from(Span::raw("g: Navigation Mode")),
-        Line::from(Span::raw("C: Calendar Mode")),
-        Line::from(Span::raw("?: Show Help")),
-        Line::from(Span::raw("Esc: Return to Normal Mode")),
-    ];
-
-    let help_paragraph = Paragraph::new(help_text)
-        .block(help_block)
-        .style(Style::default().fg(Color::White));
-
-    frame.render_widget(help_paragraph, help_area);
+        .title("Debug Overlay");
+    let debug_content = format!("{:#?}", model); // Display model state
+    let debug_paragraph = Paragraph::new(debug_content)
+        .block(debug_block)
+        .style(Style::default().fg(Color::Red))
+        .scroll((model.debug_scroll, 0));
+    frame.render_widget(debug_paragraph, debug_area);
 }
 
 // Terminal initialization
@@ -326,17 +371,17 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn render_calendar_mode(frame: &mut Frame, app: &Model, area: Rect) {
+fn render_calendar_mode(frame: &mut Frame, model: &Model, area: Rect) {
     let calendar_block = Block::default()
         .borders(Borders::ALL)
         .title("Calendar View");
     frame.render_widget(calendar_block, area);
 
     // Call the render_calendar function we defined earlier
-    render_calendar(frame, app, area);
+    render_calendar(frame, model, area);
 }
 
-fn render_calendar(frame: &mut Frame, app: &Model, area: Rect) {
+fn render_calendar(frame: &mut Frame, model: &Model, area: Rect) {
     let now = chrono::Local::now();
     let (year, month, today) = (now.year(), now.month(), now.day());
     let days_in_month = days_in_month(year, month);
@@ -378,7 +423,7 @@ fn render_calendar(frame: &mut Frame, app: &Model, area: Rect) {
 
                 // Here, you would render tasks for this day
                 // You'll need to implement a function to get tasks for a specific day
-                render_tasks_for_day(frame, app, day_area, year, month, day_number);
+                render_tasks_for_day(frame, model, day_area, year, month, day_number);
             }
         }
     }
@@ -386,13 +431,13 @@ fn render_calendar(frame: &mut Frame, app: &Model, area: Rect) {
 
 fn render_tasks_for_day(
     frame: &mut Frame,
-    app: &Model,
+    model: &Model,
     area: Rect,
     year: i32,
     month: u32,
     day: u32,
 ) {
-    let tasks_for_day = app.tasks.values().filter(|task| {
+    let tasks_for_day = model.tasks.values().filter(|task| {
         if let Some(start_time) = task.start_time {
             start_time.year() == year && start_time.month() == month && start_time.day() == day
         } else {

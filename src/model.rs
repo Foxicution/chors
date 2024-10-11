@@ -125,6 +125,9 @@ pub struct Model {
     pub mode: Mode,
     pub overlay: Overlay,
     pub input: String,
+    pub command_input: String,
+    pub taskbar_info: String,
+    pub taskbar_message: String,
     pub nav: IndexMap<Uuid, Vec<Uuid>>,
     pub selected: Option<Uuid>,
     pub tags: HashSet<String>,
@@ -132,6 +135,7 @@ pub struct Model {
     pub autocomplete_suggestions: Vec<String>,
     pub debug_scroll: u16,
     pub current_view: View,
+    pub selected_view: String,
     pub saved_views: IndexMap<String, View>,
     pub navigation_input: String,
 }
@@ -140,24 +144,42 @@ impl Model {
     pub fn new() -> Self {
         let mut list_state = ListState::default();
         list_state.select(None);
+
+        let current_view = View {
+            filter_lists: Vec::new(),
+        };
+        let mut saved_views = IndexMap::new();
+        let selected_view = "default".to_string();
+        saved_views.insert(selected_view.clone(), current_view.clone());
+
         Self {
             tasks: IndexMap::new(),
             list_state,
             mode: Mode::List,
             overlay: Overlay::None,
             input: String::new(),
+            command_input: String::new(),
+            taskbar_info: String::new(),
+            taskbar_message: String::new(),
             nav: IndexMap::new(),
             selected: None,
             tags: HashSet::new(),
             contexts: HashSet::new(),
             autocomplete_suggestions: Vec::new(),
             debug_scroll: 0,
-            current_view: View {
-                filter_lists: Vec::new(),
-            },
-            saved_views: IndexMap::new(),
+            current_view,
+            selected_view,
+            saved_views,
             navigation_input: String::new(),
         }
+    }
+
+    pub fn set_taskbar_message(&mut self, message: &str) {
+        self.taskbar_message = message.to_string();
+    }
+
+    pub fn clear_taskbar_message(&mut self) {
+        self.taskbar_message.clear();
     }
 
     pub fn get_path(&self) -> Vec<Uuid> {
