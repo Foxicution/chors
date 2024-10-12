@@ -1,9 +1,9 @@
-use uuid::Uuid;
-
 use crate::model::{
     filter::{Condition, Filter, FilterCondition},
     task::Task,
 };
+use std::rc::Rc;
+use uuid::Uuid;
 
 pub enum Message<'a> {
     // Task management
@@ -15,7 +15,7 @@ pub enum Message<'a> {
         path: &'a [Uuid],
     },
     UpdateTask {
-        task: &'a mut Task,
+        task_id: Uuid,
         update: TaskUpdate,
     },
     MoveTask {
@@ -31,11 +31,11 @@ pub enum Message<'a> {
         filter_id: &'a Uuid,
     },
     UpdateFilter {
-        filter: &'a mut Filter,
-        update: FilterUpdate,
+        filter_id: Uuid,
+        update: FilterUpdate<'a>,
     },
     UpdateCurrentFilter {
-        expression: String,
+        expression: &'a str,
     },
     ApplyFilterCondition,
 
@@ -47,7 +47,7 @@ pub enum Message<'a> {
         index: usize,
     },
 
-    // Erorr
+    // Error
     ErrorOccured {
         message: &'a str,
     },
@@ -58,9 +58,9 @@ pub struct TaskUpdate {
     pub completed: Option<bool>,
 }
 
-pub struct FilterUpdate {
-    pub name: Option<String>,
-    pub filter_condition: Option<FilterCondition>,
+pub struct FilterUpdate<'a> {
+    pub name: Option<&'a str>,
+    pub filter_condition: Option<Rc<FilterCondition>>,
 }
 
 pub enum Direction {

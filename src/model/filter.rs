@@ -9,37 +9,38 @@ use nom::{
     sequence::{delimited, pair, preceded},
     IResult,
 };
+use std::rc::Rc;
 use uuid::{NoContext, Timestamp, Uuid};
 
 // Condition structs and implementations
 
 #[derive(Clone)]
 pub struct Tag {
-    tag: String,
+    tag: Rc<String>,
 }
 
 impl Tag {
-    pub fn new(tag: String) -> Self {
+    pub fn new(tag: Rc<String>) -> Self {
         Tag { tag }
     }
 
     pub fn evaluate(&self, task: &Task) -> bool {
-        task.tags.contains(&self.tag)
+        task.tags.contains(self.tag.as_ref())
     }
 }
 
 #[derive(Clone)]
 pub struct Context {
-    context: String,
+    context: Rc<String>,
 }
 
 impl Context {
-    pub fn new(context: String) -> Self {
+    pub fn new(context: Rc<String>) -> Self {
         Context { context }
     }
 
     pub fn evaluate(&self, task: &Task) -> bool {
-        task.contexts.contains(&self.context)
+        task.contexts.contains(self.context.as_ref())
     }
 }
 
@@ -60,11 +61,11 @@ impl Completion {
 
 #[derive(Clone)]
 pub struct Text {
-    text: String,
+    text: Rc<String>,
 }
 
 impl Text {
-    pub fn new(text: String) -> Self {
+    pub fn new(text: Rc<String>) -> Self {
         Text { text }
     }
 
@@ -108,12 +109,12 @@ impl Condition {
 
 #[derive(Clone)]
 pub struct FilterCondition {
-    pub expression: String,
+    pub expression: Rc<String>,
     pub condition: Condition,
 }
 
 impl FilterCondition {
-    pub fn new(expression: String) -> Result<Self, String> {
+    pub fn new(expression: Rc<String>) -> Result<Self, String> {
         if expression.trim().is_empty() {
             Ok(FilterCondition {
                 expression,
@@ -132,16 +133,16 @@ impl FilterCondition {
 #[derive(Clone)]
 pub struct Filter {
     pub id: Uuid,
-    pub name: String,
-    pub filter_condition: FilterCondition,
+    pub name: Rc<String>,
+    pub filter_condition: Rc<FilterCondition>,
 }
 
 impl Filter {
-    pub fn new(name: String, filter_condition: FilterCondition) -> Self {
+    pub fn new(name: Rc<String>, filter_condition: FilterCondition) -> Self {
         Filter {
             id: Uuid::new_v7(Timestamp::now(NoContext)),
             name,
-            filter_condition,
+            filter_condition: Rc::new(filter_condition),
         }
     }
 }
@@ -152,7 +153,6 @@ pub fn parse_filter_expression(input: &str) -> Result<Condition, String> {
     match all_consuming(expression)(input) {
         Ok((_, condition)) => Ok(condition),
         Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
-            // Convert the nom error to a human-readable error message
             let err_msg = convert_error(input, e);
             Err(format!("Parsing error: {}", err_msg))
         }
@@ -247,7 +247,7 @@ fn tag_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
     context(
         "tag condition",
         map(preceded(char('#'), identifier), |tag_name: &str| {
-            Condition::Tag(Tag::new(tag_name.to_string()))
+            Condition::Tag(Tag::new(Rc::new(tag_name.to_string())))
         }),
     )(input)
 }
@@ -256,7 +256,7 @@ fn context_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>
     context(
         "context condition",
         map(preceded(char('@'), identifier), |context_name: &str| {
-            Condition::Context(Context::new(context_name.to_string()))
+            Condition::Context(Context::new(Rc::new(context_name.to_string())))
         }),
     )(input)
 }
@@ -266,7 +266,7 @@ fn text_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
         "text condition",
         map(
             delimited(char('"'), is_not("\""), char('"')),
-            |text: &str| Condition::Text(Text::new(text.to_string())),
+            |text: &str| Condition::Text(Text::new(Rc::new(text.to_string()))),
         ),
     )(input)
 }
@@ -280,48 +280,48 @@ mod tests {
     use super::*;
     use crate::model::task::Task;
     use chrono::Utc;
-    use indexmap::IndexMap;
+    use rpds::HashTrieMap;
     use uuid::{NoContext, Timestamp, Uuid};
 
     fn create_test_task() -> Task {
         Task {
             id: Uuid::new_v7(Timestamp::now(NoContext)),
-            description: "Complete the urgent report #work @office".to_string(),
-            tags: vec!["work".to_string()].into_iter().collect(),
-            contexts: vec!["office".to_string()].into_iter().collect(),
+            description: Rc::new("Complete the urgent report #work @office".to_string()),
+            tags: Rc::new(vec!["work".to_string()].into_iter().collect()),
+            contexts: Rc::new(vec!["office".to_string()].into_iter().collect()),
             completed: None,
-            subtasks: IndexMap::new(),
+            subtasks: Rc::new(HashTrieMap::new()),
         }
     }
 
     fn create_completed_task() -> Task {
         Task {
             id: Uuid::new_v7(Timestamp::now(NoContext)),
-            description: "Buy groceries #errand @shopping".to_string(),
-            tags: vec!["errand".to_string()].into_iter().collect(),
-            contexts: vec!["shopping".to_string()].into_iter().collect(),
+            description: Rc::new("Buy groceries #errand @shopping".to_string()),
+            tags: Rc::new(vec!["errand".to_string()].into_iter().collect()),
+            contexts: Rc::new(vec!["shopping".to_string()].into_iter().collect()),
             completed: Some(Utc::now()),
-            subtasks: IndexMap::new(),
+            subtasks: Rc::new(HashTrieMap::new()),
         }
     }
 
     #[test]
     fn test_tag_condition() {
         let task = create_test_task();
-        let condition = Tag::new("work".to_string());
+        let condition = Tag::new("work".to_string().into());
         assert!(condition.evaluate(&task));
 
-        let wrong_tag_condition = Tag::new("personal".to_string());
+        let wrong_tag_condition = Tag::new("personal".to_string().into());
         assert!(!wrong_tag_condition.evaluate(&task));
     }
 
     #[test]
     fn test_context_condition() {
         let task = create_test_task();
-        let condition = Context::new("office".to_string());
+        let condition = Context::new("office".to_string().into());
         assert!(condition.evaluate(&task));
 
-        let wrong_context_condition = Context::new("home".to_string());
+        let wrong_context_condition = Context::new("home".to_string().into());
         assert!(!wrong_context_condition.evaluate(&task));
     }
 
@@ -342,17 +342,17 @@ mod tests {
     #[test]
     fn test_text_condition() {
         let task = create_test_task();
-        let condition = Text::new("urgent".to_string());
+        let condition = Text::new("urgent".to_string().into());
         assert!(condition.evaluate(&task));
 
-        let wrong_text_condition = Text::new("birthday".to_string());
+        let wrong_text_condition = Text::new("birthday".to_string().into());
         assert!(!wrong_text_condition.evaluate(&task));
     }
 
     #[test]
     fn test_not_condition() {
         let task = create_test_task();
-        let tag_condition = Tag::new("work".to_string());
+        let tag_condition = Tag::new("work".to_string().into());
         let not_condition = Condition::Not(Box::new(Condition::Tag(tag_condition)));
 
         assert!(!not_condition.evaluate(&task));
@@ -361,8 +361,8 @@ mod tests {
     #[test]
     fn test_and_condition() {
         let task = create_test_task();
-        let tag_condition = Tag::new("work".to_string());
-        let context_condition = Context::new("office".to_string());
+        let tag_condition = Tag::new("work".to_string().into());
+        let context_condition = Context::new("office".to_string().into());
 
         let and_condition = Condition::And(
             Box::new(Condition::Tag(tag_condition)),
@@ -371,8 +371,10 @@ mod tests {
         assert!(and_condition.evaluate(&task));
 
         let wrong_and_condition = Condition::And(
-            Box::new(Condition::Tag(Tag::new("personal".to_string()))),
-            Box::new(Condition::Context(Context::new("office".to_string()))),
+            Box::new(Condition::Tag(Tag::new("personal".to_string().into()))),
+            Box::new(Condition::Context(Context::new(
+                "office".to_string().into(),
+            ))),
         );
         assert!(!wrong_and_condition.evaluate(&task));
     }
@@ -380,8 +382,8 @@ mod tests {
     #[test]
     fn test_or_condition() {
         let task = create_test_task();
-        let tag_condition = Tag::new("work".to_string());
-        let wrong_context_condition = Context::new("home".to_string());
+        let tag_condition = Tag::new("work".to_string().into());
+        let wrong_context_condition = Context::new("home".to_string().into());
 
         let or_condition = Condition::Or(
             Box::new(Condition::Tag(tag_condition)),
@@ -390,8 +392,8 @@ mod tests {
         assert!(or_condition.evaluate(&task));
 
         let wrong_or_condition = Condition::Or(
-            Box::new(Condition::Tag(Tag::new("personal".to_string()))),
-            Box::new(Condition::Context(Context::new("home".to_string()))),
+            Box::new(Condition::Tag(Tag::new("personal".to_string().into()))),
+            Box::new(Condition::Context(Context::new("home".to_string().into()))),
         );
         assert!(!wrong_or_condition.evaluate(&task));
     }

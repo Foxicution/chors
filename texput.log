@@ -1,0 +1,27 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/nixos.org) (preloaded format=latex 1980.1.1)  12 OCT 2024 18:06
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**\makeatletter\def\HCode{\futurelet\HCode\HChar}\def\HChar{\ifx"\HCode\def\HCo
+de"##1"{\Link##1}\expandafter\HCode\else\expandafter\Link\fi}\def\Link#1.a.b.c.
+{\g@addto@macro\@documentclasshook{\RequirePackage[#1,xhtml]{tex4ht}}\let\HCode
+\documentstyle\def\documentstyle{\let\documentstyle\HCode\expandafter\def\csnam
+e tex4ht\endcsname{#1,xhtml}\def\HCode####1{\documentstyle[tex4ht,}\@ifnextchar
+[{\HCode}{\documentstyle[tex4ht]}}}\makeatother\HCode .a.b.c.\input
+
+*
+! Emergency stop.
+<*> 
+    
+End of file on the terminal!
+
+ 
+Here is how much of TeX's memory you used:
+ 16 strings out of 474117
+ 375 string characters out of 5717549
+ 1925184 words of memory out of 5000000
+ 22479 multiletter control sequences out of 15000+600000
+ 558069 words of font info for 36 fonts, out of 8000000 for 9000
+ 1141 hyphenation exceptions out of 8191
+ 11i,0n,13p,491b,8s stack positions out of 10000i,1000n,20000p,200000b,200000s
+No pages of output.
