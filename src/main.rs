@@ -1,5 +1,6 @@
 mod model;
 mod update;
+mod utils;
 
 use model::filter::{Filter, FilterCondition};
 use model::model::Model;
@@ -7,6 +8,7 @@ use model::task::Task;
 use update::{message::Message, update::update};
 
 fn main() {
+    // Initialize the model
     let mut model = Model::new();
 
     // Create some tasks
@@ -18,52 +20,16 @@ fn main() {
     let task6 = Task::new("Urgent repair needed #urgent @home".to_string());
 
     // Mark some tasks as completed
-    task1.mark_completed();
-    task3.mark_completed();
+    task1 = task1.mark_completed();
+    task3 = task3.mark_completed();
 
-    // Add tasks to the model using the update function
-    update(
-        Message::AddTask {
-            task: task1,
-            path: &[],
-        },
-        &mut model,
-    );
-    update(
-        Message::AddTask {
-            task: task2,
-            path: &[],
-        },
-        &mut model,
-    );
-    update(
-        Message::AddTask {
-            task: task3,
-            path: &[],
-        },
-        &mut model,
-    );
-    update(
-        Message::AddTask {
-            task: task4,
-            path: &[],
-        },
-        &mut model,
-    );
-    update(
-        Message::AddTask {
-            task: task5,
-            path: &[],
-        },
-        &mut model,
-    );
-    update(
-        Message::AddTask {
-            task: task6,
-            path: &[],
-        },
-        &mut model,
-    );
+    // Add tasks to the model using AddSiblingTask since they are root-level tasks
+    model = update(Message::AddSiblingTask { task: task1 }, &model);
+    model = update(Message::AddSiblingTask { task: task2 }, &model);
+    model = update(Message::AddSiblingTask { task: task3 }, &model);
+    model = update(Message::AddSiblingTask { task: task4 }, &model);
+    model = update(Message::AddSiblingTask { task: task5 }, &model);
+    model = update(Message::AddSiblingTask { task: task6 }, &model);
 
     // Define and add a filter
     let filter_expr = "not [x] and (\"project\" or @home)";
@@ -74,15 +40,10 @@ fn main() {
     let filter_id = new_filter.id;
 
     // Add filter to the model using the update function
-    update(Message::AddFilter { filter: new_filter }, &mut model);
+    model = update(Message::AddFilter { filter: new_filter }, &model);
 
     // Select the filter by sending the message
-    update(
-        Message::SelectFilter {
-            filter_id: &filter_id,
-        },
-        &mut model,
-    );
+    model = update(Message::SelectFilter { filter_id }, &model);
 
     // Display the applied filter
     println!("Filter Expression: {}", model.current_filter.expression);
@@ -94,6 +55,8 @@ fn main() {
     // Print the filtered tasks after applying the filter
     println!("\nFiltered Tasks:");
     for path in model.filtered_tasks.values() {
-        println!("{}", model.get_task(path).unwrap());
+        if let Some(task) = model.get_task(path) {
+            println!("{}", task);
+        }
     }
 }

@@ -278,9 +278,8 @@ fn identifier(input: &str) -> IResult<&str, &str, VerboseError<&str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::task::Task;
+    use crate::{model::task::Task, utils::reorderable_map::ReorderableMap};
     use chrono::Utc;
-    use indexmap::IndexMap;
     use uuid::{NoContext, Timestamp, Uuid};
 
     fn create_test_task() -> Task {
@@ -290,7 +289,7 @@ mod tests {
             tags: vec!["work".to_string()].into_iter().collect(),
             contexts: vec!["office".to_string()].into_iter().collect(),
             completed: None,
-            subtasks: IndexMap::new(),
+            subtasks: ReorderableMap::new(),
         }
     }
 
@@ -301,7 +300,7 @@ mod tests {
             tags: vec!["errand".to_string()].into_iter().collect(),
             contexts: vec!["shopping".to_string()].into_iter().collect(),
             completed: Some(Utc::now()),
-            subtasks: IndexMap::new(),
+            subtasks: ReorderableMap::new(),
         }
     }
 

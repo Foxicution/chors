@@ -5,52 +5,61 @@ use crate::model::{
     task::Task,
 };
 
-pub enum Message<'a> {
+pub enum Message {
     // Task management
-    AddTask {
-        task: Task,
-        path: &'a [Uuid],
-    },
-    RemoveTask {
-        path: &'a [Uuid],
-    },
-    UpdateTask {
-        task: &'a mut Task,
-        update: TaskUpdate,
-    },
-    MoveTask {
-        old_path: &'a [Uuid],
-        new_path: &'a [Uuid],
-    },
+    AddSiblingTask { task: Task },
+    AddChildTask { task: Task },
 
     // Filter management
-    AddFilter {
-        filter: Filter,
-    },
-    SelectFilter {
-        filter_id: &'a Uuid,
-    },
-    UpdateFilter {
-        filter: &'a mut Filter,
-        update: FilterUpdate,
-    },
-    UpdateCurrentFilter {
-        expression: String,
-    },
-    ApplyFilterCondition,
+    AddFilter { filter: Filter },
+    SelectFilter { filter_id: Uuid },
 
     // Navigation
-    Move {
-        direction: Direction,
-    },
-    Select {
-        index: usize,
-    },
+    Move { direction: Direction },
+    // AddTask {
+    //     task: Task,
+    //     path: &'a [Uuid],
+    // },
+    // RemoveTask {
+    //     path: &'a [Uuid],
+    // },
+    // UpdateTask {
+    //     task: &'a mut Task,
+    //     update: TaskUpdate,
+    // },
+    // MoveTask {
+    //     old_path: &'a [Uuid],
+    //     new_path: &'a [Uuid],
+    // },
 
-    // Erorr
-    ErrorOccured {
-        message: &'a str,
-    },
+    // Filter management
+    // AddFilter {
+    //     filter: Filter,
+    // },
+    // SelectFilter {
+    //     filter_id: &'a Uuid,
+    // },
+    // UpdateFilter {
+    //     filter: &'a mut Filter,
+    //     update: FilterUpdate,
+    // },
+    // UpdateCurrentFilter {
+    //     expression: String,
+    // },
+    // ApplyFilterCondition,
+
+    // // Navigation
+    // Move {
+    //     direction: Direction,
+    // },
+    // Select {
+    //     index: usize,
+    // },
+
+    // // Erorr
+    // ErrorOccured {
+    //     message: &'a str,
+    // },
 }
 
 pub struct TaskUpdate {
