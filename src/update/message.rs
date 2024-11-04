@@ -25,18 +25,26 @@ pub enum Message {
 impl PartialEq for Message {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (Message::Undo, Message::Undo) => true,
+            (Message::Redo, Message::Redo) => true,
             (Message::AddSiblingTask { task: t1 }, Message::AddSiblingTask { task: t2 }) => {
-                t1.id == t2.id
+                t1 == t2
             }
-            (Message::AddChildTask { task: t1 }, Message::AddChildTask { task: t2 }) => {
-                t1.id == t2.id
-            }
+            (Message::AddChildTask { task: t1 }, Message::AddChildTask { task: t2 }) => t1 == t2,
+            (Message::RemoveTask { path: p1 }, Message::RemoveTask { path: p2 }) => p1 == p2,
+            (Message::AddFilter { filter: f1 }, Message::AddFilter { filter: f2 }) => f1 == f2,
+            (
+                Message::SelectFilter { filter_id: id1 },
+                Message::SelectFilter { filter_id: id2 },
+            ) => id1 == id2,
+            (Message::ApplyFilter { filter: f1 }, Message::ApplyFilter { filter: f2 }) => f1 == f2,
+            (Message::Navigate { direction: d1 }, Message::Navigate { direction: d2 }) => d1 == d2,
             _ => false,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Direction {
     Up,
     Down,

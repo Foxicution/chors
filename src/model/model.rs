@@ -25,6 +25,17 @@ impl DisplayMessage {
     }
 }
 
+impl PartialEq for DisplayMessage {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DisplayMessage::Success(msg1), DisplayMessage::Success(msg2)) => msg1 == msg2,
+            (DisplayMessage::Error(msg1), DisplayMessage::Error(msg2)) => msg1 == msg2,
+            (DisplayMessage::None, DisplayMessage::None) => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Model {
     pub tasks: PersistentIndexMap<Uuid, Task>,

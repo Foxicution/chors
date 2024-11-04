@@ -31,6 +31,12 @@ impl Tag {
     }
 }
 
+impl PartialEq for Tag {
+    fn eq(&self, other: &Self) -> bool {
+        self.tag == other.tag
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Context {
     context: Rc<String>,
@@ -45,6 +51,12 @@ impl Context {
 
     pub fn evaluate(&self, task: &Task) -> bool {
         task.contexts.contains(&*self.context)
+    }
+}
+
+impl PartialEq for Context {
+    fn eq(&self, other: &Self) -> bool {
+        self.context == other.context
     }
 }
 
@@ -63,6 +75,12 @@ impl Completion {
     }
 }
 
+impl PartialEq for Completion {
+    fn eq(&self, other: &Self) -> bool {
+        self.completed == other.completed
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Text {
     text: Rc<String>,
@@ -77,6 +95,12 @@ impl Text {
 
     pub fn evaluate(&self, task: &Task) -> bool {
         task.description.contains(&*self.text)
+    }
+}
+
+impl PartialEq for Text {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
     }
 }
 
@@ -109,6 +133,26 @@ impl Condition {
     }
 }
 
+impl PartialEq for Condition {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Condition::Tag(tag1), Condition::Tag(tag2)) => tag1 == tag2,
+            (Condition::Context(ctx1), Condition::Context(ctx2)) => ctx1 == ctx2,
+            (Condition::Completion(comp1), Condition::Completion(comp2)) => comp1 == comp2,
+            (Condition::Text(text1), Condition::Text(text2)) => text1 == text2,
+            (Condition::Not(cond1), Condition::Not(cond2)) => cond1 == cond2,
+            (Condition::And(left1, right1), Condition::And(left2, right2)) => {
+                left1 == left2 && right1 == right2
+            }
+            (Condition::Or(left1, right1), Condition::Or(left2, right2)) => {
+                left1 == left2 && right1 == right2
+            }
+            (Condition::AlwaysTrue, Condition::AlwaysTrue) => true,
+            _ => false,
+        }
+    }
+}
+
 // Filter structs
 
 #[derive(Clone, Debug)]
@@ -128,6 +172,13 @@ impl FilterCondition {
     }
 }
 
+// Implement PartialEq for FilterCondition to enable comparison
+impl PartialEq for FilterCondition {
+    fn eq(&self, other: &Self) -> bool {
+        self.expression == other.expression && self.condition == other.condition
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Filter {
     pub id: Uuid,
@@ -142,6 +193,14 @@ impl Filter {
             name: name.into(),
             filter_condition,
         }
+    }
+}
+
+impl PartialEq for Filter {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.name == other.name
+            && self.filter_condition == other.filter_condition
     }
 }
 
