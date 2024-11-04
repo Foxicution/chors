@@ -47,3 +47,57 @@ impl History {
         self.last_action.as_ref()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Model;
+    use crate::update::message::Message;
+
+    #[test]
+    fn test_push_and_undo_redo() {
+        let mut history = History::new(2); // Small max_history to test limit
+        let model1 = Model::new();
+        let model2 = model1.clone();
+        let message1 = Message::Undo;
+
+        // Push first state
+        history.push(&model1, &message1);
+        assert_eq!(history.undo_stack.len(), 1);
+
+        // Push second state
+        history.push(&model2, &message1);
+        assert_eq!(history.undo_stack.len(), 2);
+
+        // Push third state, should pop the first one due to max_history limit
+        history.push(&model1, &message1);
+        assert_eq!(history.undo_stack.len(), 2);
+
+        // Undo twice
+        let _ = history.undo(&model1);
+        let _ = history.undo(&model1);
+
+        assert_eq!(history.redo_stack.len(), 2);
+
+        // Redo once
+        let _ = history.redo(&model1);
+        assert_eq!(history.redo_stack.len(), 1);
+    }
+
+    #[test]
+    fn test_last_action() {
+        let mut history = History::new(100);
+        let model = Model::new();
+        let message = Message::Undo;
+
+        history.push(&model, &message);
+
+        // Undo an action
+        let _ = history.undo(&model);
+        assert_eq!(history.last_action(), Some(&Message::Undo));
+
+        // Redo an action
+        let _ = history.redo(&model);
+        assert_eq!(history.last_action(), Some(&Message::Undo));
+    }
+}

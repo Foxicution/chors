@@ -314,4 +314,49 @@ mod tests {
             Some(&subtask2)
         );
     }
+
+    #[test]
+    fn test_task_equality() {
+        let task1 = Task::new("Task #tag1 @context1");
+        let task2 = Task::new_with_id("Task #tag1 @context1", *task1.id);
+
+        // Even though they were created differently, they have the same content
+        assert_eq!(task1, task2);
+    }
+
+    #[test]
+    fn test_task_inequality() {
+        let task1 = Task::new("Task1 #tag1 @context1");
+        let task2 = Task::new("Task2 #tag2 @context2");
+
+        // Different IDs and content
+        assert_ne!(task1, task2);
+    }
+
+    #[test]
+    fn test_extract_tags_and_contexts_no_tags_or_contexts() {
+        let description = "Complete the report";
+        let (tags, contexts) = extract_tags_and_contexts(description);
+
+        assert!(tags.is_empty());
+        assert!(contexts.is_empty());
+    }
+
+    #[test]
+    fn test_tags_and_contexts_are_unique() {
+        let description = "Task #tag #tag @context @context";
+        let (tags, contexts) = extract_tags_and_contexts(description);
+
+        let expected_tags: HashTrieSet<_> = ["tag".to_string()].into_iter().collect();
+        let expected_contexts: HashTrieSet<_> = ["context".to_string()].into_iter().collect();
+
+        assert_eq!(
+            tags.iter().cloned().collect::<HashTrieSet<_>>(),
+            expected_tags
+        );
+        assert_eq!(
+            contexts.iter().cloned().collect::<HashTrieSet<_>>(),
+            expected_contexts
+        );
+    }
 }

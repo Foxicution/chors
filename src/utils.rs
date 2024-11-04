@@ -300,4 +300,73 @@ mod tests {
         assert!(map.is_empty());
         assert!(map.get(&"key1".to_string()).is_none());
     }
+
+    #[test]
+    fn test_get_index() {
+        // Test get_index method
+        let map = PersistentIndexMap::new();
+        let map = map.insert("key1".to_string(), 10);
+        let map = map.insert("key2".to_string(), 20);
+
+        assert_eq!(map.get_index(&"key1".to_string()), Some(0));
+        assert_eq!(map.get_index(&"key2".to_string()), Some(1));
+        assert_eq!(map.get_index(&"key3".to_string()), None);
+    }
+
+    #[test]
+    fn test_contains_key() {
+        // Test contains_key method
+        let map = PersistentIndexMap::new();
+        let map = map.insert("key1".to_string(), 10);
+
+        assert!(map.contains_key(&"key1".to_string()));
+        assert!(!map.contains_key(&"key2".to_string()));
+    }
+
+    #[test]
+    fn test_keys() {
+        // Test keys method
+        let map = PersistentIndexMap::new();
+        let map = map.insert("key1".to_string(), 10);
+        let map = map.insert("key2".to_string(), 20);
+
+        let keys = map.keys();
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys.get(0), Some(&"key1".to_string()));
+        assert_eq!(keys.get(1), Some(&"key2".to_string()));
+    }
+
+    #[test]
+    fn test_keys_to_vec() {
+        // Test keys_to_vec method
+        let map = PersistentIndexMap::new();
+        let map = map.insert("key1".to_string(), 10);
+        let map = map.insert("key2".to_string(), 20);
+
+        let keys_vec = map.keys_to_vec();
+        assert_eq!(keys_vec.len(), 2);
+        assert_eq!(keys_vec[0], "key1".to_string());
+        assert_eq!(keys_vec[1], "key2".to_string());
+    }
+
+    #[test]
+    fn test_from_iter() {
+        // Test FromIterator implementation
+        let entries = vec![
+            ("key1".to_string(), 10),
+            ("key2".to_string(), 20),
+            ("key3".to_string(), 30),
+        ];
+        let map: PersistentIndexMap<String, i32> = entries.into_iter().collect();
+
+        assert_eq!(map.len(), 3);
+        assert_eq!(map.get(&"key1".to_string()), Some(&10));
+        assert_eq!(map.get(&"key2".to_string()), Some(&20));
+        assert_eq!(map.get(&"key3".to_string()), Some(&30));
+
+        let keys_vec = map.keys_to_vec();
+        assert_eq!(keys_vec[0], "key1".to_string());
+        assert_eq!(keys_vec[1], "key2".to_string());
+        assert_eq!(keys_vec[2], "key3".to_string());
+    }
 }

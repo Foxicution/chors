@@ -1119,4 +1119,69 @@ mod tests {
         assert!(model.filtered_tasks.contains_key(&new_task.id));
         assert_eq!(model.selected_task.unwrap(), *new_task.id);
     }
+
+    #[test]
+    fn test_with_success_message() {
+        let model = Model::new();
+        let message = "Operation successful";
+        let updated_model = model.with_success(message);
+
+        assert_eq!(
+            updated_model.message,
+            DisplayMessage::Success(message.to_string())
+        );
+    }
+
+    #[test]
+    fn test_with_error_message() {
+        let model = Model::new();
+        let message = "An error occurred";
+        let updated_model = model.with_error(message);
+
+        assert_eq!(
+            updated_model.message,
+            DisplayMessage::Error(message.to_string())
+        );
+    }
+
+    #[test]
+    fn test_get_path_existing_selection() {
+        let mut model = setup_model_with_tasks();
+        let selected_task_id = *model.tasks.get_key_at_index(0).unwrap();
+        model.selected_task = Some(selected_task_id);
+
+        let path = model.get_path();
+        assert!(path.is_some());
+        assert_eq!(path.unwrap(), &vector![selected_task_id]);
+    }
+
+    #[test]
+    fn test_get_path_no_selection() {
+        let model = setup_model_with_tasks();
+        let path = model.get_path();
+
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn test_with_tasks_preserves_filter() {
+        let model = setup_model_with_tasks();
+
+        // Add a new task
+        let new_task = Task::new("New Task #new");
+        let mut tasks = model.tasks.clone();
+        tasks = tasks.insert(*new_task.id, new_task.clone());
+
+        // Apply a filter that matches the new task
+        let filter_condition = FilterCondition::new("#new").unwrap();
+        let model = model.with_filter_condition(filter_condition);
+
+        // Update model with new tasks
+        let model = model.with_tasks(tasks, Some(*new_task.id));
+
+        // Verify that the new task is in filtered tasks
+        assert_eq!(model.filtered_tasks.len(), 1);
+        assert!(model.filtered_tasks.contains_key(&new_task.id));
+        assert_eq!(model.selected_task.unwrap(), *new_task.id);
+    }
 }

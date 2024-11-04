@@ -108,7 +108,7 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::filter::FilterCondition;
+    use crate::model::filter::{Filter, FilterCondition};
     use crate::model::task::Task;
     use crate::update::message::{Direction, Message};
 
@@ -119,6 +119,52 @@ mod tests {
             .with_sibling_task(Task::new("Task2"))?
             .with_sibling_task(Task::new("Task3"))?
             .with_sibling_task(Task::new("Task4"))
+    }
+
+    #[test]
+    fn test_select_filter() {
+        let mut history = History::new(100);
+        let mut model = setup_model_with_tasks().unwrap();
+
+        // Add a new filter
+        let filter_condition = FilterCondition::new("\"Task1\"").unwrap();
+        let filter = Filter::new("Filter1", filter_condition);
+        let filter_id = filter.id;
+        model = model.with_filter(filter);
+
+        // Select the new filter
+        let model = update(&Message::SelectFilter { filter_id }, &model, &mut history);
+
+        // Verify that the selected filter is applied
+        assert_eq!(model.selected_filter_id.unwrap(), filter_id);
+        assert_eq!(model.filtered_tasks.len(), 1);
+        assert!(model
+            .filtered_tasks
+            .contains_key(model.tasks.get_key_at_index(0).unwrap()));
+    }
+
+    #[test]
+    fn test_apply_filter() {
+        let mut history = History::new(100);
+        let model = setup_model_with_tasks().unwrap();
+
+        // Create a filter condition that matches "Task2"
+        let filter_condition = FilterCondition::new("\"Task2\"").unwrap();
+
+        // Apply the filter directly
+        let model = update(
+            &Message::ApplyFilter {
+                filter: filter_condition.clone(),
+            },
+            &model,
+            &mut history,
+        );
+
+        // Verify that the filter is applied correctly
+        assert_eq!(model.filtered_tasks.len(), 1);
+        assert!(model
+            .filtered_tasks
+            .contains_key(model.tasks.get_key_at_index(1).unwrap()));
     }
 
     #[test]
@@ -312,6 +358,57 @@ mod tests {
         assert!(model.filtered_tasks.contains_key(&task4.id));
         assert!(!model.filtered_tasks.contains_key(&task2.id));
         assert!(!model.filtered_tasks.contains_key(&task3.id));
+    }
+
+    #[test]
+    fn test_redo_functionality() {
+        let model = Model::new();
+        let mut history = History::new(100);
+        let task = Task::new("New Task");
+
+        // Perform an action
+        let model = update(
+            &Message::AddSiblingTask { task: task.clone() },
+            &model,
+            &mut history,
+        );
+
+        // Undo the action
+        let model = update(&Message::Undo, &model, &mut history);
+
+        // Redo the action
+        let model = update(&Message::Redo, &model, &mut history);
+
+        // Verify that the task is back in the model
+        assert!(model.tasks.contains_key(&task.id));
+        assert_eq!(
+            model.message.as_str().unwrap(),
+            format!("Redid action: AddSiblingTask {{ task: {:?} }}", task)
+        );
+    }
+
+    #[test]
+    fn test_undo_nothing_to_undo() {
+        let model = Model::new();
+        let mut history = History::new(100);
+
+        // Attempt to undo without any history
+        let model = update(&Message::Undo, &model, &mut history);
+
+        // Verify that an error message is set
+        assert_eq!(model.message.as_str().unwrap(), "Nothing to undo!");
+    }
+
+    #[test]
+    fn test_redo_nothing_to_redo() {
+        let model = Model::new();
+        let mut history = History::new(100);
+
+        // Attempt to redo without any history
+        let model = update(&Message::Redo, &model, &mut history);
+
+        // Verify that an error message is set
+        assert_eq!(model.message.as_str().unwrap(), "Nothing to redo!");
     }
 
     #[test]

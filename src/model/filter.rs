@@ -604,4 +604,32 @@ mod tests {
         // Should evaluate to true for the completed task (completed, @shopping, and groceries)
         assert!(filter_condition.evaluate(&completed_task));
     }
+
+    #[test]
+    fn test_filter_condition_creation() {
+        let expression = "#work and @office";
+        let filter_condition = FilterCondition::new(expression).unwrap();
+
+        assert_eq!(filter_condition.expression, expression);
+        assert!(matches!(filter_condition.condition, Condition::And(_, _)));
+    }
+
+    #[test]
+    fn test_filter_creation() {
+        let expression = "#work";
+        let filter_condition = FilterCondition::new(expression).unwrap();
+        let filter = Filter::new("Work Filter", filter_condition.clone());
+
+        assert_eq!(filter.name, "Work Filter");
+        assert_eq!(filter.filter_condition, filter_condition);
+    }
+
+    #[test]
+    fn test_parse_filter_expression_invalid() {
+        let expression = "invalid_expression";
+        let result = parse_filter_expression(expression);
+
+        // Since "invalid_expression" does not match any valid operand, it should return an error
+        assert!(result.is_err());
+    }
 }
