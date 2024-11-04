@@ -9,41 +9,46 @@ use nom::{
     sequence::{delimited, pair, preceded},
     IResult,
 };
-use uuid::{NoContext, Timestamp, Uuid};
+use std::rc::Rc;
+use uuid::Uuid;
 
 // Condition structs and implementations
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tag {
-    tag: String,
+    tag: Rc<String>,
 }
 
 impl Tag {
-    pub fn new(tag: String) -> Self {
-        Tag { tag }
+    pub fn new<S: Into<String>>(tag: S) -> Self {
+        Tag {
+            tag: tag.into().into(),
+        }
     }
 
     pub fn evaluate(&self, task: &Task) -> bool {
-        task.tags.contains(&self.tag)
+        task.tags.contains(&*self.tag)
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Context {
-    context: String,
+    context: Rc<String>,
 }
 
 impl Context {
-    pub fn new(context: String) -> Self {
-        Context { context }
+    pub fn new<S: Into<String>>(context: S) -> Self {
+        Context {
+            context: context.into().into(),
+        }
     }
 
     pub fn evaluate(&self, task: &Task) -> bool {
-        task.contexts.contains(&self.context)
+        task.contexts.contains(&*self.context)
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Completion {
     completed: bool,
 }
@@ -58,34 +63,34 @@ impl Completion {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Text {
-    text: String,
+    text: Rc<String>,
 }
 
 impl Text {
-    pub fn new(text: String) -> Self {
-        Text { text }
+    pub fn new<S: Into<String>>(text: S) -> Self {
+        Text {
+            text: text.into().into(),
+        }
     }
 
     pub fn evaluate(&self, task: &Task) -> bool {
-        task.description
-            .to_lowercase()
-            .contains(&self.text.to_lowercase())
+        task.description.contains(&*self.text)
     }
 }
 
 // Condition enum
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Condition {
     Tag(Tag),
     Context(Context),
     Completion(Completion),
     Text(Text),
-    Not(Box<Condition>),
-    And(Box<Condition>, Box<Condition>),
-    Or(Box<Condition>, Box<Condition>),
+    Not(Rc<Condition>),
+    And(Rc<Condition>, Rc<Condition>),
+    Or(Rc<Condition>, Rc<Condition>),
     AlwaysTrue,
 }
 
@@ -106,30 +111,24 @@ impl Condition {
 
 // Filter structs
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FilterCondition {
     pub expression: String,
     pub condition: Condition,
 }
 
 impl FilterCondition {
-    pub fn new(expression: String) -> Result<Self, String> {
-        if expression.trim().is_empty() {
-            Ok(FilterCondition {
-                expression,
-                condition: Condition::AlwaysTrue,
-            })
-        } else {
-            let condition = parse_filter_expression(&expression)?;
-            Ok(FilterCondition {
-                expression,
-                condition,
-            })
-        }
+    pub fn new<S: Into<String>>(expression: S) -> Result<Self, String> {
+        let expression = expression.into();
+        let condition = parse_filter_expression(&expression)?;
+        Ok(FilterCondition {
+            expression,
+            condition,
+        })
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Filter {
     pub id: Uuid,
     pub name: String,
@@ -137,10 +136,10 @@ pub struct Filter {
 }
 
 impl Filter {
-    pub fn new(name: String, filter_condition: FilterCondition) -> Self {
+    pub fn new<S: Into<String>>(name: S, filter_condition: FilterCondition) -> Self {
         Filter {
-            id: Uuid::new_v7(Timestamp::now(NoContext)),
-            name,
+            id: Uuid::now_v7(),
+            name: name.into(),
             filter_condition,
         }
     }
@@ -149,6 +148,9 @@ impl Filter {
 // Parsing functions
 
 pub fn parse_filter_expression(input: &str) -> Result<Condition, String> {
+    if input.trim().is_empty() {
+        return Ok(Condition::AlwaysTrue);
+    }
     match all_consuming(expression)(input) {
         Ok((_, condition)) => Ok(condition),
         Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
@@ -173,7 +175,7 @@ fn expression(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
             ),
             |(first, rest)| {
                 rest.into_iter().fold(first, |acc, (_, term)| {
-                    Condition::Or(Box::new(acc), Box::new(term))
+                    Condition::Or(acc.into(), term.into())
                 })
             },
         ),
@@ -193,7 +195,7 @@ fn term(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
             ),
             |(first, rest)| {
                 rest.into_iter().fold(first, |acc, (_, factor)| {
-                    Condition::And(Box::new(acc), Box::new(factor))
+                    Condition::And(acc.into(), factor.into())
                 })
             },
         ),
@@ -206,7 +208,7 @@ fn factor(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
         alt((
             map(
                 preceded(pair(tag_no_case("not"), multispace0), factor),
-                |cond| Condition::Not(Box::new(cond)),
+                |cond| Condition::Not(cond.into()),
             ),
             operand,
         )),
@@ -247,7 +249,7 @@ fn tag_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
     context(
         "tag condition",
         map(preceded(char('#'), identifier), |tag_name: &str| {
-            Condition::Tag(Tag::new(tag_name.to_string()))
+            Condition::Tag(Tag::new(tag_name))
         }),
     )(input)
 }
@@ -256,7 +258,7 @@ fn context_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>
     context(
         "context condition",
         map(preceded(char('@'), identifier), |context_name: &str| {
-            Condition::Context(Context::new(context_name.to_string()))
+            Condition::Context(Context::new(context_name))
         }),
     )(input)
 }
@@ -266,7 +268,7 @@ fn text_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
         "text condition",
         map(
             delimited(char('"'), is_not("\""), char('"')),
-            |text: &str| Condition::Text(Text::new(text.to_string())),
+            |text: &str| Condition::Text(Text::new(text)),
         ),
     )(input)
 }
@@ -278,49 +280,51 @@ fn identifier(input: &str) -> IResult<&str, &str, VerboseError<&str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{model::task::Task, utils::reorderable_map::ReorderableMap};
+    use crate::{model::task::Task, utils::PersistentIndexMap};
     use chrono::Utc;
-    use uuid::{NoContext, Timestamp, Uuid};
+    use uuid::Uuid;
 
     fn create_test_task() -> Task {
         Task {
-            id: Uuid::new_v7(Timestamp::now(NoContext)),
-            description: "Complete the urgent report #work @office".to_string(),
+            id: Uuid::now_v7().into(),
+            description: "Complete the urgent report #work @office"
+                .to_string()
+                .into(),
             tags: vec!["work".to_string()].into_iter().collect(),
             contexts: vec!["office".to_string()].into_iter().collect(),
-            completed: None,
-            subtasks: ReorderableMap::new(),
+            completed: None.into(),
+            subtasks: PersistentIndexMap::new(),
         }
     }
 
     fn create_completed_task() -> Task {
         Task {
-            id: Uuid::new_v7(Timestamp::now(NoContext)),
-            description: "Buy groceries #errand @shopping".to_string(),
+            id: Uuid::now_v7().into(),
+            description: "Buy groceries #errand @shopping".to_string().into(),
             tags: vec!["errand".to_string()].into_iter().collect(),
             contexts: vec!["shopping".to_string()].into_iter().collect(),
-            completed: Some(Utc::now()),
-            subtasks: ReorderableMap::new(),
+            completed: Some(Utc::now()).into(),
+            subtasks: PersistentIndexMap::new(),
         }
     }
 
     #[test]
     fn test_tag_condition() {
         let task = create_test_task();
-        let condition = Tag::new("work".to_string());
+        let condition = Tag::new("work");
         assert!(condition.evaluate(&task));
 
-        let wrong_tag_condition = Tag::new("personal".to_string());
+        let wrong_tag_condition = Tag::new("personal");
         assert!(!wrong_tag_condition.evaluate(&task));
     }
 
     #[test]
     fn test_context_condition() {
         let task = create_test_task();
-        let condition = Context::new("office".to_string());
+        let condition = Context::new("office");
         assert!(condition.evaluate(&task));
 
-        let wrong_context_condition = Context::new("home".to_string());
+        let wrong_context_condition = Context::new("home");
         assert!(!wrong_context_condition.evaluate(&task));
     }
 
@@ -341,18 +345,18 @@ mod tests {
     #[test]
     fn test_text_condition() {
         let task = create_test_task();
-        let condition = Text::new("urgent".to_string());
+        let condition = Text::new("urgent");
         assert!(condition.evaluate(&task));
 
-        let wrong_text_condition = Text::new("birthday".to_string());
+        let wrong_text_condition = Text::new("birthday");
         assert!(!wrong_text_condition.evaluate(&task));
     }
 
     #[test]
     fn test_not_condition() {
         let task = create_test_task();
-        let tag_condition = Tag::new("work".to_string());
-        let not_condition = Condition::Not(Box::new(Condition::Tag(tag_condition)));
+        let tag_condition = Tag::new("work");
+        let not_condition = Condition::Not(Condition::Tag(tag_condition).into());
 
         assert!(!not_condition.evaluate(&task));
     }
@@ -360,18 +364,18 @@ mod tests {
     #[test]
     fn test_and_condition() {
         let task = create_test_task();
-        let tag_condition = Tag::new("work".to_string());
-        let context_condition = Context::new("office".to_string());
+        let tag_condition = Tag::new("work");
+        let context_condition = Context::new("office");
 
         let and_condition = Condition::And(
-            Box::new(Condition::Tag(tag_condition)),
-            Box::new(Condition::Context(context_condition)),
+            Condition::Tag(tag_condition).into(),
+            Condition::Context(context_condition).into(),
         );
         assert!(and_condition.evaluate(&task));
 
         let wrong_and_condition = Condition::And(
-            Box::new(Condition::Tag(Tag::new("personal".to_string()))),
-            Box::new(Condition::Context(Context::new("office".to_string()))),
+            Condition::Tag(Tag::new("personal")).into(),
+            Condition::Context(Context::new("office")).into(),
         );
         assert!(!wrong_and_condition.evaluate(&task));
     }
@@ -379,18 +383,18 @@ mod tests {
     #[test]
     fn test_or_condition() {
         let task = create_test_task();
-        let tag_condition = Tag::new("work".to_string());
-        let wrong_context_condition = Context::new("home".to_string());
+        let tag_condition = Tag::new("work");
+        let wrong_context_condition = Context::new("home");
 
         let or_condition = Condition::Or(
-            Box::new(Condition::Tag(tag_condition)),
-            Box::new(Condition::Context(wrong_context_condition)),
+            Condition::Tag(tag_condition).into(),
+            Condition::Context(wrong_context_condition).into(),
         );
         assert!(or_condition.evaluate(&task));
 
         let wrong_or_condition = Condition::Or(
-            Box::new(Condition::Tag(Tag::new("personal".to_string()))),
-            Box::new(Condition::Context(Context::new("home".to_string()))),
+            Condition::Tag(Tag::new("personal")).into(),
+            Condition::Context(Context::new("home")).into(),
         );
         assert!(!wrong_or_condition.evaluate(&task));
     }
@@ -447,5 +451,98 @@ mod tests {
         let expression = "[x] and";
         let result = parse_filter_expression(expression);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_empty_expression() {
+        let task = create_test_task();
+        let completed_task = create_completed_task();
+
+        // Empty expression should return Condition::AlwaysTrue
+        let expression = "";
+        let filter_condition = parse_filter_expression(expression).unwrap();
+        assert!(filter_condition.evaluate(&task));
+        assert!(filter_condition.evaluate(&completed_task));
+    }
+
+    #[test]
+    fn test_parse_expression_with_and_or() {
+        let task = create_test_task();
+        let completed_task = create_completed_task();
+
+        // Parse complex expression: (not [x] and #work) or (@home and "report")
+        let expression = "(not [x] and #work) or (@home and \"report\")";
+        let filter_condition = parse_filter_expression(expression).unwrap();
+
+        // Ensure it evaluates to true for the incomplete task (not completed and has #work)
+        assert!(filter_condition.evaluate(&task));
+
+        // Ensure it evaluates to false for the completed task
+        assert!(!filter_condition.evaluate(&completed_task));
+    }
+
+    #[test]
+    fn test_parse_expression_with_nested_and_or() {
+        let task = create_test_task();
+        let completed_task = create_completed_task();
+
+        // Parse complex expression: (not [x] and #work) or (([x] or @shopping) and "groceries")
+        let expression = "(not [x] and #work) or (([x] or @shopping) and \"groceries\")";
+        let filter_condition = parse_filter_expression(expression).unwrap();
+
+        // Should evaluate to false for the incomplete task
+        assert!(filter_condition.evaluate(&task));
+
+        // Should evaluate to true for the completed task
+        assert!(filter_condition.evaluate(&completed_task));
+    }
+
+    #[test]
+    fn test_parse_expression_with_complex_nesting() {
+        let task = create_test_task();
+        let completed_task = create_completed_task();
+
+        // Parse expression: (not [x] and (#work or "urgent")) or ([x] and @shopping)
+        let expression = "(not [x] and (#work or \"urgent\")) or ([x] and @shopping)";
+        let filter_condition = parse_filter_expression(expression).unwrap();
+
+        // Should evaluate to true for the incomplete task (has #work and not completed)
+        assert!(filter_condition.evaluate(&task));
+
+        // Should evaluate to true for the completed task (completed and @shopping)
+        assert!(filter_condition.evaluate(&completed_task));
+    }
+
+    #[test]
+    fn test_parse_expression_with_not_and_and() {
+        let task = create_test_task();
+        let completed_task = create_completed_task();
+
+        // Parse expression: not (#personal or @home) and not [x]
+        let expression = "not (#personal or @home) and not [x]";
+        let filter_condition = parse_filter_expression(expression).unwrap();
+
+        // Should evaluate to true for the incomplete task (doesn't have #personal, @home or completed)
+        assert!(filter_condition.evaluate(&task));
+
+        // Should evaluate to false for the completed task
+        assert!(!filter_condition.evaluate(&completed_task));
+    }
+
+    #[test]
+    fn test_parse_expression_with_deep_nesting() {
+        let task = create_test_task();
+        let completed_task = create_completed_task();
+
+        // Parse complex deeply nested expression:
+        // (not [x] and (#work or "urgent")) and (not #personal) or ([x] and (@shopping or "groceries"))
+        let expression = "(not [x] and (#work or \"urgent\")) and (not #personal) or ([x] and (@shopping or \"groceries\"))";
+        let filter_condition = parse_filter_expression(expression).unwrap();
+
+        // Should evaluate to true for the incomplete task (not completed, has #work, and no #personal)
+        assert!(filter_condition.evaluate(&task));
+
+        // Should evaluate to true for the completed task (completed, @shopping, and groceries)
+        assert!(filter_condition.evaluate(&completed_task));
     }
 }

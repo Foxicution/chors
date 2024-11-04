@@ -1,435 +1,362 @@
 use crate::{
-    model::{filter::Condition, filter::Filter, model::Model, task::Task},
-    update::message::Message,
-    utils::reorderable_map::ReorderableMap,
+    model::Model,
+    update::{History, Message},
 };
-use uuid::Uuid;
 
-pub fn update(message: Message, model: &Model) -> Model {
-    let result = match message {
+struct UpdateResult {
+    model: Model,
+    message: Option<String>,
+    save_to_history: bool,
+}
+
+impl UpdateResult {
+    fn new(model: Model) -> Self {
+        Self {
+            model,
+            message: None,
+            save_to_history: true,
+        }
+    }
+
+    fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
+
+    fn without_history(mut self) -> Self {
+        self.save_to_history = false;
+        self
+    }
+}
+
+pub fn update(message: &Message, model: &Model, history: &mut History) -> Model {
+    let result = match &message {
         // Task management
-        Message::AddSiblingTask { task } => add_sibling_task(model, task),
-        Message::AddChildTask { task } => add_child_task(model, task),
+        Message::AddSiblingTask { task } => model
+            .with_sibling_task(task.clone())
+            .map(|new_model| UpdateResult::new(new_model).with_message("Added sibling task.")),
+
+        Message::AddChildTask { task } => model
+            .with_child_task(task.clone())
+            .map(|new_model| UpdateResult::new(new_model).with_message("Added child task.")),
+
+        Message::RemoveTask { path } => model
+            .with_removed_task(path)
+            .map(|new_model| UpdateResult::new(new_model).with_message("Removed task.")),
 
         // Filter management
-        Message::AddFilter { filter } => add_filter(model, filter),
-        Message::SelectFilter { filter_id } => select_filter(model, filter_id),
+        Message::AddFilter { filter } => Ok(model.with_filter(filter.clone()))
+            .map(|new_model| UpdateResult::new(new_model).with_message("Added new filter.")),
+
+        Message::SelectFilter { filter_id } => model
+            .with_filter_select(*filter_id)
+            .map(|new_model| UpdateResult::new(new_model).with_message("Selected filter.")),
+
+        Message::ApplyFilter { filter } => Ok(model.with_filter_condition(filter.clone()))
+            .map(|new_model| UpdateResult::new(new_model).with_message("Selected filter")),
 
         // Navigation
-        Message::Move { direction } => Ok(model.clone()),
+        Message::Navigate { direction } => Ok(model.with_selection_moved(direction))
+            .map(|new_model| UpdateResult::new(new_model).without_history()),
+
+        // History
+        Message::Undo => {
+            if let Some(prev_model) = history.undo(model) {
+                let last_action = history.last_action().cloned();
+                let msg = match last_action {
+                    Some(action) => format!("Undid action: {:?}", action),
+                    None => "Undid last action.".to_string(),
+                };
+                Ok(UpdateResult::new(prev_model)
+                    .with_message(msg)
+                    .without_history())
+            } else {
+                Err("Nothing to undo!".to_string())
+            }
+        }
+
+        Message::Redo => {
+            if let Some(next_model) = history.redo(model) {
+                let last_action = history.last_action().cloned();
+                let msg = match last_action {
+                    Some(action) => format!("Redid action: {:?}", action),
+                    None => "Redid last action.".to_string(),
+                };
+                Ok(UpdateResult::new(next_model)
+                    .with_message(msg)
+                    .without_history())
+            } else {
+                Err("Nothing to redo!".to_string())
+            }
+        }
     };
 
     match result {
-        Ok(new_model) => new_model,
-        Err(error_message) => set_error(model, error_message),
-    }
-}
-
-/// Adds a filter to the model.
-fn add_filter(model: &Model, filter: Filter) -> Result<Model, String> {
-    let new_filters = model.filters.insert(filter.id, filter);
-    Ok(Model {
-        filters: new_filters,
-        ..model.clone()
-    })
-}
-
-/// Selects a filter by its ID and applies it to the model.
-fn select_filter(model: &Model, filter_id: Uuid) -> Result<Model, String> {
-    if let Some(filter) = model.filters.get(&filter_id) {
-        let new_model = Model {
-            current_filter: filter.filter_condition.clone(),
-            ..model.clone()
-        };
-
-        // Apply the filter to update the filtered tasks
-        Ok(apply_filters_to_model(&new_model))
-    } else {
-        Err("Filter not found.".to_string())
-    }
-}
-
-/// Adds a sibling task to the currently selected task.
-fn add_sibling_task(model: &Model, task: Task) -> Result<Model, String> {
-    if let Some(task_id) = model.selected_task {
-        if let Some(path) = model.filtered_tasks.get(&task_id) {
-            if path.len() >= 2 {
-                // Add sibling to the parent task's subtasks
-                let parent_path = &path[..path.len() - 1];
-                if let Some(parent_task) = model.get_task(parent_path) {
-                    let new_parent_task = parent_task.add_subtask(task);
-                    let new_model = update_task_at_path(model, parent_path, new_parent_task)?;
-
-                    // Reapply the filter to see if the new task should appear in the filtered view
-                    let new_model = apply_filters_to_model(&new_model);
-
-                    Ok(new_model)
-                } else {
-                    Err("Parent task doesn't exist.".to_string())
-                }
-            } else {
-                // Add sibling at root level
-                let new_tasks = model.tasks.insert(task.id, task);
-                let new_model = Model {
-                    tasks: new_tasks,
-                    ..model.clone()
-                };
-
-                // Reapply the filter after adding the task
-                Ok(apply_filters_to_model(&new_model))
+        Ok(update_result) => {
+            if update_result.save_to_history {
+                history.push(&update_result.model, message)
             }
-        } else {
-            Err("Selected task doesn't exist.".to_string())
-        }
-    } else {
-        // Add task at the root level if no task is selected
-        let new_tasks = model.tasks.insert(task.id, task);
-        let new_model = Model {
-            tasks: new_tasks,
-            ..model.clone()
-        };
-
-        // Reapply the filter after adding the task
-        Ok(apply_filters_to_model(&new_model))
-    }
-}
-
-/// Adds a child task to the currently selected task.
-fn add_child_task(model: &Model, child_task: Task) -> Result<Model, String> {
-    if let Some(task_id) = model.selected_task {
-        if let Some(path) = model.filtered_tasks.get(&task_id) {
-            if let Some(task) = model.get_task(path) {
-                // Add the child task to the selected task's subtasks
-                let new_task = task.add_subtask(child_task);
-                let new_model = update_task_at_path(model, path, new_task)?;
-
-                // Reapply the filter to see if the new task should appear in the filtered view
-                Ok(apply_filters_to_model(&new_model))
-            } else {
-                Err("Selected task doesn't exist.".to_string())
+            match update_result.message {
+                Some(msg) => update_result.model.with_success(msg),
+                None => update_result.model,
             }
-        } else {
-            Err("Selected task path doesn't exist.".to_string())
         }
-    } else {
-        Err("Can't add a subtask if no tasks are selected.".to_string())
-    }
-}
-
-/// Helper function to update the model's error field.
-fn set_error(model: &Model, message: String) -> Model {
-    Model {
-        error: Some(message),
-        ..model.clone()
-    }
-}
-
-/// Applies the current filter to update the filtered tasks view.
-fn apply_filters_to_model(model: &Model) -> Model {
-    let mut filtered_tasks = ReorderableMap::new();
-
-    for (task_id, task) in model.tasks.iter() {
-        let current_path = vec![*task_id];
-        filtered_tasks = apply_filter(
-            task,
-            &model.current_filter.condition,
-            filtered_tasks,
-            current_path,
-            false,
-        );
-    }
-
-    Model {
-        filtered_tasks,
-        ..model.clone()
-    }
-}
-
-/// Recursive helper function to apply a filter to a task and its subtasks.
-fn apply_filter(
-    task: &Task,
-    condition: &Condition,
-    mut filtered_tasks: ReorderableMap<Uuid, Vec<Uuid>>,
-    mut current_path: Vec<Uuid>,
-    ignore_filter: bool,
-) -> ReorderableMap<Uuid, Vec<Uuid>> {
-    let new_ignore_filter = if ignore_filter || condition.evaluate(task) {
-        filtered_tasks = filtered_tasks.insert(task.id, current_path.clone());
-        true
-    } else {
-        ignore_filter
-    };
-
-    for (subtask_id, subtask) in task.subtasks.iter() {
-        current_path.push(*subtask_id);
-        filtered_tasks = apply_filter(
-            subtask,
-            condition,
-            filtered_tasks,
-            current_path.clone(),
-            new_ignore_filter,
-        );
-        current_path.pop();
-    }
-
-    filtered_tasks
-}
-
-/// Updates a task at the specified path.
-fn update_task_at_path(
-    model: &Model,
-    path: &[Uuid],
-    updated_task: Task,
-) -> Result<Model, &'static str> {
-    if path.len() == 1 {
-        let new_tasks = model.tasks.insert(path[0], updated_task);
-        Ok(Model {
-            tasks: new_tasks,
-            ..model.clone()
-        })
-    } else {
-        let parent_path = &path[..path.len() - 1];
-        if let Some(parent_task) = model.get_task(parent_path) {
-            let new_parent_task = parent_task.add_subtask(updated_task);
-            update_task_at_path(model, parent_path, new_parent_task)
-        } else {
-            Err("Parent task doesn't exist.")
-        }
-    }
-}
-
-/// Adds a task at the root level of the task tree.
-fn add_task_at_root(model: &Model, task: Task) -> Model {
-    let new_tasks = model.tasks.insert(task.id, task);
-    Model {
-        tasks: new_tasks,
-        ..model.clone()
+        Err(error_message) => model.with_error(error_message),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::filter::FilterCondition;
     use crate::model::task::Task;
+    use crate::update::message::{Direction, Message};
 
-    // Helper function to create a basic task for testing purposes
-    fn create_task(description: &str) -> Task {
-        Task::new(description.to_string())
+    // Helper function to set up a model with sample tasks
+    fn setup_model_with_tasks() -> Result<Model, String> {
+        Model::new()
+            .with_sibling_task(Task::new("Task1"))?
+            .with_sibling_task(Task::new("Task2"))?
+            .with_sibling_task(Task::new("Task3"))?
+            .with_sibling_task(Task::new("Task4"))
+    }
+
+    #[test]
+    fn test_navigation_wraps_around() {
+        // Test that navigation wraps around when moving past the first or last task
+        let mut history = History::new(100);
+        let mut model = setup_model_with_tasks().unwrap();
+        model.selected_task = None;
+
+        // Initially, no task is selected
+        assert!(model.selected_task.is_none());
+
+        // Navigate down (should select the first task)
+        let model = update(
+            &Message::Navigate {
+                direction: Direction::Down,
+            },
+            &model,
+            &mut history,
+        );
+        assert_eq!(
+            model.selected_task.unwrap(),
+            *model.filtered_tasks.get_key_at_index(0).unwrap()
+        );
+
+        // Navigate up from the first task (should wrap around to the last task)
+        let model = update(
+            &Message::Navigate {
+                direction: Direction::Up,
+            },
+            &model,
+            &mut history,
+        );
+        assert_eq!(
+            model.selected_task.unwrap(),
+            *model
+                .filtered_tasks
+                .get_key_at_index(model.filtered_tasks.len() - 1)
+                .unwrap()
+        );
+
+        // Navigate down from the last task (should wrap around to the first task)
+        let model = update(
+            &Message::Navigate {
+                direction: Direction::Down,
+            },
+            &model,
+            &mut history,
+        );
+        assert_eq!(
+            model.selected_task.unwrap(),
+            *model.filtered_tasks.get_key_at_index(0).unwrap()
+        );
     }
 
     #[test]
     fn test_add_sibling_task() {
-        let model = Model::new();
+        // Test adding a sibling task when a task is selected
+        let mut history = History::new(100);
+        let mut model = setup_model_with_tasks().unwrap();
 
-        let task1 = create_task("First task");
-        let task2 = create_task("Second task");
+        // Select task2
+        model.selected_task = Some(*model.tasks.get_key_at_index(1).unwrap());
 
-        // Add task1 to the model using the update function and a message
+        // Add sibling task through Message
+        let new_task = Task::new("New Sibling Task");
         let model = update(
-            Message::AddSiblingTask {
-                task: task1.clone(),
+            &Message::AddSiblingTask {
+                task: new_task.clone(),
             },
             &model,
+            &mut history,
         );
 
-        // Set task1 as selected
-        let model = Model {
-            selected_task: Some(task1.id),
-            ..model
-        };
-
-        // Add task2 as a sibling to task1
-        let model = update(
-            Message::AddSiblingTask {
-                task: task2.clone(),
-            },
-            &model,
-        );
-
-        // Check if both tasks are at the root level
-        assert_eq!(model.tasks.len(), 2);
-        assert!(model.tasks.get(&task1.id).is_some());
-        assert!(model.tasks.get(&task2.id).is_some());
-    }
-
-    #[test]
-    fn test_add_multiple_siblings() {
-        let model = Model::new();
-
-        let task1 = create_task("First task");
-        let task2 = create_task("Second task");
-        let task3 = create_task("Third task");
-
-        // Add task1 to the model and select it
-        let model = update(
-            Message::AddSiblingTask {
-                task: task1.clone(),
-            },
-            &model,
-        );
-        let model = Model {
-            selected_task: Some(task1.id),
-            ..model
-        };
-
-        // Add task2 and task3 as siblings to task1
-        let model = update(
-            Message::AddSiblingTask {
-                task: task2.clone(),
-            },
-            &model,
-        );
-        let model = update(
-            Message::AddSiblingTask {
-                task: task3.clone(),
-            },
-            &model,
-        );
-
-        // Ensure all tasks are at the root level and are in the correct order
-        assert_eq!(model.tasks.len(), 3);
-        assert!(model.tasks.get(&task1.id).is_some());
-        assert!(model.tasks.get(&task2.id).is_some());
-        assert!(model.tasks.get(&task3.id).is_some());
-
-        // Check order of the tasks
-        let task_ids: Vec<&Uuid> = model.tasks.ordered_keys();
-        assert_eq!(task_ids, vec![&task1.id, &task2.id, &task3.id]);
+        // The new task should be added at the same level as task2
+        assert!(model.tasks.contains_key(&new_task.id));
+        assert_eq!(model.tasks.len(), 5);
+        assert_eq!(model.selected_task.unwrap(), *new_task.id);
     }
 
     #[test]
     fn test_add_child_task() {
-        // Initial State: Model with one parent task
-        let model = Model::new();
-        let parent_task = create_task("Parent task");
+        // Test adding a child task under a selected parent
+        let mut history = History::new(100);
+        let mut model = setup_model_with_tasks().unwrap();
 
-        // Add parent task to the model and set it as selected
+        // Select task2
+        let task2_id = *model.tasks.get_key_at_index(1).unwrap();
+        model.selected_task = Some(task2_id);
+
+        // Add child task through Message
+        let child_task = Task::new("Child Task");
         let model = update(
-            Message::AddSiblingTask {
-                task: parent_task.clone(),
-            },
-            &model,
-        );
-
-        // After adding the parent task, ensure it's in filtered_tasks
-        assert!(
-            model.filtered_tasks.get(&parent_task.id).is_some(),
-            "Parent task not found in filtered_tasks"
-        );
-
-        // Set the parent task as selected
-        let model = Model {
-            selected_task: Some(parent_task.id),
-            ..model
-        };
-
-        // Action: Add a child task to the parent task
-        let child_task = create_task("Child task");
-        let model = update(
-            Message::AddChildTask {
+            &Message::AddChildTask {
                 task: child_task.clone(),
             },
             &model,
+            &mut history,
         );
 
-        // Expected State: Parent task should have one child
-        let parent_in_model = model.get_task(&[parent_task.id]).unwrap();
+        // The child task should be added under task2
+        let task2 = model.tasks.get(&task2_id).unwrap();
+        assert!(task2.subtasks.contains_key(&child_task.id));
+        assert_eq!(task2.subtasks.len(), 1);
+        assert_eq!(model.selected_task.unwrap(), *child_task.id);
+    }
+
+    #[test]
+    fn test_add_child_task_no_selection() {
+        // Test error handling when adding a child task with no selected task
+        let mut history = History::new(100);
+        let mut model = setup_model_with_tasks().unwrap();
+        model.selected_task = None;
+
+        // No task is selected
+        assert!(model.selected_task.is_none());
+
+        // Try to add a child task through Message (should result in an error)
+        let child_task = Task::new("Child Task");
+        let model = update(
+            &Message::AddChildTask {
+                task: child_task.clone(),
+            },
+            &model,
+            &mut history,
+        );
+
+        // Should set an error in the model
+        assert!(model.message.as_str().is_some());
         assert_eq!(
-            parent_in_model.subtasks.len(),
-            1,
-            "Parent task should have 1 child"
-        );
-        assert!(
-            parent_in_model.subtasks.get(&child_task.id).is_some(),
-            "Child task not found in parent task's subtasks"
+            model.message.as_str().unwrap(),
+            "Can't insert a child task with no parent task selected"
         );
     }
 
     #[test]
-    fn test_add_child_to_non_existent_task() {
-        let model = Model::new();
+    fn test_update_selection_on_task_removal() {
+        // Test that when the selected task is removed, the selection updates to the closest task
+        let mut history = History::new(100);
+        let mut model = setup_model_with_tasks().unwrap();
 
-        let child_task = create_task("Child task");
+        // Select task2
+        model.selected_task = Some(*model.tasks.get_key_at_index(1).unwrap());
 
-        // Try adding a child task without selecting any parent task
-        let result = update(
-            Message::AddChildTask {
-                task: child_task.clone(),
+        // Remove task2 and verify selection update
+        let model = update(
+            &Message::RemoveTask {
+                path: vec![model.selected_task.unwrap()],
             },
             &model,
+            &mut history,
         );
 
-        // Ensure that the operation fails with an error
-        assert!(result.error.is_some());
+        // Check that the selected task updated to the closest task
+        assert!(model.selected_task.is_some());
+
+        // The closest task should be task3, which is now at the same position task2 was in
+        let expected_task_id = *model.filtered_tasks.get_key_at_index(1).unwrap();
+        assert_eq!(model.selected_task.unwrap(), expected_task_id);
     }
 
     #[test]
-    fn test_update_task_at_path() {
-        let model = Model::new();
+    fn test_filter_tasks_with_complex_condition() {
+        // Test filtering tasks with a complex condition
+        let mut history = History::new(100);
+        let mut model = Model::new();
 
-        let task1 = create_task("First task");
-        let updated_task1 = create_task("Updated first task");
+        // Create tasks with various tags and contexts
+        let task1 = Task::new("Task1 #work @home");
+        let task2 = Task::new("Task2 #personal @gym");
+        let task3 = Task::new("Task3 #work @office");
+        let task4 = Task::new("Task4 #urgent @home");
 
-        // Add task1 to the model
-        let model = update(
-            Message::AddSiblingTask {
-                task: task1.clone(),
-            },
-            &model,
-        );
+        // Insert tasks into model
+        model.tasks = model
+            .tasks
+            .insert(*task1.id, task1.clone())
+            .insert(*task2.id, task2.clone())
+            .insert(*task3.id, task3.clone())
+            .insert(*task4.id, task4.clone());
 
-        // Update task1 in the model
-        let model = update_task_at_path(&model, &[task1.id], updated_task1.clone()).unwrap();
+        // Apply a complex filter
+        let filter_expr = "(#work and @home) or (#urgent and not @gym)";
+        let filter = FilterCondition::new(filter_expr).unwrap();
 
-        // Verify that task1 was updated
-        let updated_in_model = model.tasks.get(&task1.id).unwrap();
-        assert_eq!(updated_in_model.description, updated_task1.description);
+        // Update filtered_tasks through Message
+        let model = update(&Message::ApplyFilter { filter }, &model, &mut history);
+
+        // Expected to match task1 and task4
+        assert!(model.filtered_tasks.contains_key(&task1.id));
+        assert!(model.filtered_tasks.contains_key(&task4.id));
+        assert!(!model.filtered_tasks.contains_key(&task2.id));
+        assert!(!model.filtered_tasks.contains_key(&task3.id));
     }
 
     #[test]
-    fn test_add_sibling_to_task_with_parent() {
+    fn test_add_sibling_task_with_success_message() {
         let model = Model::new();
+        let mut history = History::new(100);
+        let task = Task::new("New Task");
 
-        let parent_task = create_task("Parent task");
-        let child_task = create_task("Child task");
-        let sibling_task = create_task("Sibling task");
-
-        // Add parent_task to the model
-        let model = update(
-            Message::AddSiblingTask {
-                task: parent_task.clone(),
-            },
+        let updated_model = update(
+            &Message::AddSiblingTask { task: task.clone() },
             &model,
+            &mut history,
         );
 
-        // Set parent_task as selected and add child_task to it
-        let model = Model {
-            selected_task: Some(parent_task.id),
-            ..model
-        };
+        assert_eq!(
+            updated_model.message.as_str().unwrap(),
+            "Added sibling task."
+        );
+        assert_eq!(history.undo_stack.len(), 1);
+        assert_eq!(
+            history.undo_stack.back().unwrap().1,
+            Message::AddSiblingTask { task }
+        );
+    }
+
+    #[test]
+    fn test_undo_with_action_display() {
+        let model = Model::new();
+        let mut history = History::new(100);
+        let task = Task::new("New Task");
+
+        // Perform an action
         let model = update(
-            Message::AddChildTask {
-                task: child_task.clone(),
-            },
+            &Message::AddSiblingTask { task: task.clone() },
             &model,
+            &mut history,
         );
 
-        // Set child_task as selected and add sibling_task as a sibling to child_task
-        let model = Model {
-            selected_task: Some(child_task.id),
-            ..model
-        };
-        let model = update(
-            Message::AddSiblingTask {
-                task: sibling_task.clone(),
-            },
-            &model,
-        );
+        // Undo the action
+        let model = update(&Message::Undo, &model, &mut history);
 
-        // Verify that sibling_task was added as a sibling under the same parent
-        let parent_in_model = model.tasks.get(&parent_task.id).unwrap();
-        assert_eq!(parent_in_model.subtasks.len(), 2);
-        assert!(parent_in_model.subtasks.get(&child_task.id).is_some());
-        assert!(parent_in_model.subtasks.get(&sibling_task.id).is_some());
+        assert_eq!(
+            model.message.as_str().unwrap(),
+            format!("Undid action: AddSiblingTask {{ task: {:?} }}", task)
+        );
+        assert_eq!(history.undo_stack.len(), 0);
     }
 }

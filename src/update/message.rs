@@ -1,77 +1,42 @@
 use uuid::Uuid;
 
-use crate::model::{
-    filter::{Condition, Filter, FilterCondition},
-    task::Task,
-};
+use crate::model::{Filter, FilterCondition, Task};
 
+#[derive(Debug, Clone)]
 pub enum Message {
     // Task management
     AddSiblingTask { task: Task },
     AddChildTask { task: Task },
+    RemoveTask { path: Vec<Uuid> },
 
     // Filter management
     AddFilter { filter: Filter },
     SelectFilter { filter_id: Uuid },
+    ApplyFilter { filter: FilterCondition },
 
     // Navigation
-    Move { direction: Direction },
-    // AddTask {
-    //     task: Task,
-    //     path: &'a [Uuid],
-    // },
-    // RemoveTask {
-    //     path: &'a [Uuid],
-    // },
-    // UpdateTask {
-    //     task: &'a mut Task,
-    //     update: TaskUpdate,
-    // },
-    // MoveTask {
-    //     old_path: &'a [Uuid],
-    //     new_path: &'a [Uuid],
-    // },
+    Navigate { direction: Direction },
 
-    // Filter management
-    // AddFilter {
-    //     filter: Filter,
-    // },
-    // SelectFilter {
-    //     filter_id: &'a Uuid,
-    // },
-    // UpdateFilter {
-    //     filter: &'a mut Filter,
-    //     update: FilterUpdate,
-    // },
-    // UpdateCurrentFilter {
-    //     expression: String,
-    // },
-    // ApplyFilterCondition,
-
-    // // Navigation
-    // Move {
-    //     direction: Direction,
-    // },
-    // Select {
-    //     index: usize,
-    // },
-
-    // // Erorr
-    // ErrorOccured {
-    //     message: &'a str,
-    // },
+    // History
+    Undo,
+    Redo,
 }
 
-pub struct TaskUpdate {
-    pub description: Option<String>,
-    pub completed: Option<bool>,
+impl PartialEq for Message {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Message::AddSiblingTask { task: t1 }, Message::AddSiblingTask { task: t2 }) => {
+                t1.id == t2.id
+            }
+            (Message::AddChildTask { task: t1 }, Message::AddChildTask { task: t2 }) => {
+                t1.id == t2.id
+            }
+            _ => false,
+        }
+    }
 }
 
-pub struct FilterUpdate {
-    pub name: Option<String>,
-    pub filter_condition: Option<FilterCondition>,
-}
-
+#[derive(Debug, Clone)]
 pub enum Direction {
     Up,
     Down,
