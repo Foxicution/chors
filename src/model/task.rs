@@ -42,7 +42,7 @@ impl Task {
     }
 
     /// Update the task description immutably, extracting new tags and contexts
-    pub fn update_description<S: Into<String>>(&self, new_description: S) -> Self {
+    pub fn with_description<S: Into<String>>(&self, new_description: S) -> Self {
         let new_description = new_description.into();
         let (tags, contexts) = extract_tags_and_contexts(&new_description);
         Task {
@@ -54,7 +54,7 @@ impl Task {
     }
 
     /// Flip the task and all tasks between completed/uncompleted
-    pub fn flip_completed(&self) -> Self {
+    pub fn with_flip_completed(&self) -> Self {
         // Determine the new completion status by flipping the current one
         let new_completed = if self.completed.is_some() {
             None // Currently completed, so unmark it
@@ -69,7 +69,7 @@ impl Task {
                 .iter()
                 .fold(PersistentIndexMap::new(), |acc, key| {
                     let subtask = self.subtasks.get(key).unwrap();
-                    acc.insert(*key, subtask.flip_completed())
+                    acc.insert(*key, subtask.with_flip_completed())
                 });
 
         Task {
@@ -132,7 +132,7 @@ mod tests {
         let subtask1 = Task::new("Write the introduction #work @home");
         let subtask2 = Task::new("Create graphs #work @office");
 
-        task = task.update_description("Complete the report #work @office");
+        task = task.with_description("Complete the report #work @office");
         task.subtasks = task.subtasks.insert(*subtask1.id, subtask1);
         task.subtasks = task.subtasks.insert(*subtask2.id, subtask2);
 
@@ -182,7 +182,7 @@ mod tests {
         let task = create_test_task();
 
         // Update description and check if the new description is set
-        let updated_task = task.update_description("Finish the final draft #important @home");
+        let updated_task = task.with_description("Finish the final draft #important @home");
 
         assert_eq!(
             &*updated_task.description,
@@ -210,13 +210,13 @@ mod tests {
         assert!(task.completed.is_none());
 
         // Flip the completed status
-        let completed_task = task.flip_completed();
+        let completed_task = task.with_flip_completed();
 
         // Test that the task is now marked as completed
         assert!(completed_task.completed.is_some());
 
         // Flip the completed status again
-        let uncompleted_task = completed_task.flip_completed();
+        let uncompleted_task = completed_task.with_flip_completed();
 
         // Test that the task is unmarked again
         assert!(uncompleted_task.completed.is_none());
@@ -233,7 +233,7 @@ mod tests {
         }
 
         // Flip the completed status
-        let completed_task = task.flip_completed();
+        let completed_task = task.with_flip_completed();
 
         // Test that both the task and its subtasks are now marked as completed
         assert!(completed_task.completed.is_some());
@@ -242,7 +242,7 @@ mod tests {
         }
 
         // Flip the completed status again
-        let uncompleted_task = completed_task.flip_completed();
+        let uncompleted_task = completed_task.with_flip_completed();
 
         // Test that both the task and its subtasks are unmarked again
         assert!(uncompleted_task.completed.is_none());
@@ -279,7 +279,7 @@ mod tests {
         assert_eq!(display, "[ ] Complete the report #work @office");
 
         // Test display output for a completed task
-        let completed_task = task.flip_completed();
+        let completed_task = task.with_flip_completed();
         let display = format!("{}", completed_task);
         assert_eq!(display, "[x] Complete the report #work @office");
     }

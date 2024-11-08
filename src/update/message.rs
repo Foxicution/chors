@@ -8,6 +8,7 @@ pub enum Message {
     AddSiblingTask(Task),
     AddChildTask(Task),
     RemoveTask(Vec<Uuid>),
+    FlipCompleted(Vec<Uuid>),
 
     // Filter management
     AddFilter(Filter),
@@ -30,6 +31,7 @@ impl PartialEq for Message {
         match (self, other) {
             (Message::Undo, Message::Undo) => true,
             (Message::Redo, Message::Redo) => true,
+            (Message::FlipCompleted(p1), Message::FlipCompleted(p2)) => p1 == p2,
             (Message::AddSiblingTask(t1), Message::AddSiblingTask(t2)) => t1 == t2,
             (Message::AddChildTask(t1), Message::AddChildTask(t2)) => t1 == t2,
             (Message::RemoveTask(p1), Message::RemoveTask(p2)) => p1 == p2,

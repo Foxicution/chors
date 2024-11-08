@@ -44,6 +44,10 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
             .with_removed_task(path)
             .map(|new_model| UpdateResult::new(new_model).with_message("Removed task.")),
 
+        Message::FlipCompleted(path) => model.with_flipped_completion(path).map(|new_model| {
+            UpdateResult::new(new_model).with_message("Changed completion status for task.")
+        }),
+
         // Filter management
         Message::AddFilter(filter) => Ok(model.with_filter(filter.clone()))
             .map(|new_model| UpdateResult::new(new_model).with_message("Added new filter.")),

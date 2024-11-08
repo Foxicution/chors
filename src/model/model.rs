@@ -87,6 +87,28 @@ impl Model {
         }
     }
 
+    fn with_modified_task(
+        &self,
+        path: &[Uuid],
+        modify_fn: fn(&Task) -> Task,
+    ) -> Result<Self, String> {
+        let new_tasks = modify_task_at_path(&self.tasks, path, modify_fn)?;
+
+        let filtered_tasks = filter_tasks(&self.tasks, &self.current_filter.condition);
+        let selected_task = self.get_new_selection(&filtered_tasks, None);
+
+        Ok(Self {
+            tasks: new_tasks,
+            filtered_tasks,
+            selected_task,
+            ..self.clone()
+        })
+    }
+
+    pub fn with_flipped_completion(&self, path: &[Uuid]) -> Result<Self, String> {
+        self.with_modified_task(path, |task| task.with_flip_completed())
+    }
+
     pub fn with_removed_task(&self, path: &[Uuid]) -> Result<Self, String> {
         let new_tasks = remove_task_at_path(&self.tasks, path)?;
 
@@ -257,19 +279,23 @@ impl Model {
         }
     }
 
-    fn get_path(&self) -> Option<&Vector<Uuid>> {
+    pub fn get_path(&self) -> Option<&Vector<Uuid>> {
         self.selected_task
             .and_then(|selected_id| self.filtered_tasks.get(&selected_id))
     }
 
-    // pub fn get_task(&self, path: &[Uuid]) -> Option<&Task> {
-    //     let mut current_tasks = &self.tasks;
-    //     for task_id in path {
-    //         let task = current_tasks.get(task_id)?;
-    //         current_tasks = &task.subtasks;
-    //     }
-    //     current_tasks.get(path.last()?)
-    // }
+    pub fn get_task(&self, path: &[Uuid]) -> Option<&Task> {
+        if path.is_empty() {
+            return None;
+        };
+
+        let mut current_tasks = &self.tasks;
+        for task_id in &path[..path.len() - 1] {
+            let task = current_tasks.get(task_id)?;
+            current_tasks = &task.subtasks;
+        }
+        current_tasks.get(path.last()?)
+    }
 
     /// Helper fonction to update the model's message field with a success message
     pub fn with_success<S: Into<String>>(&self, message: S) -> Self {
@@ -285,6 +311,40 @@ impl Model {
             message: DisplayMessage::Error(message.into()),
             ..self.clone()
         }
+    }
+}
+
+fn modify_task_at_path(
+    tasks: &PersistentIndexMap<Uuid, Task>,
+    path: &[Uuid],
+    modify_fn: fn(&Task) -> Task,
+) -> Result<PersistentIndexMap<Uuid, Task>, String> {
+    if path.is_empty() {
+        return Err("Path is empty; cannot modify task".to_string());
+    }
+
+    let (current_id, rest_of_path) = path.split_first().expect("Path should not be empty!");
+
+    if rest_of_path.is_empty() {
+        // Base case: apply the modification function to the task at the end of the path
+        if let Some(task) = tasks.get(current_id) {
+            Ok(tasks.insert(*current_id, modify_fn(task)))
+        } else {
+            Err(format!("Task with ID {} not found", current_id))
+        }
+    } else {
+        // Recursive case: Traverse the task hierarchy to reach the target task
+        let mut current_task = tasks
+            .get(current_id)
+            .ok_or_else(|| format!("Task with ID {} not found", current_id))?
+            .clone();
+
+        // Recursively modify the subtask within `current_task`
+        current_task.subtasks =
+            modify_task_at_path(&current_task.subtasks, rest_of_path, modify_fn)?;
+
+        // Insert the modified `current_task` back into the task map
+        Ok(tasks.insert(*current_id, current_task))
     }
 }
 
