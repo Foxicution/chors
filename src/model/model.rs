@@ -9,6 +9,12 @@ use crate::{
 use rpds::Vector;
 use uuid::Uuid;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Mode {
+    List,
+    Quit,
+}
+
 #[derive(Clone, Debug)]
 pub enum DisplayMessage {
     Success(String),
@@ -48,6 +54,8 @@ pub struct Model {
     pub selected_task: Option<Uuid>,
 
     pub message: DisplayMessage,
+
+    pub mode: Mode,
 }
 
 impl Model {
@@ -67,6 +75,15 @@ impl Model {
             selected_task: None,
 
             message: DisplayMessage::None,
+
+            mode: Mode::List,
+        }
+    }
+
+    pub fn with_mode(&self, mode: Mode) -> Self {
+        Self {
+            mode,
+            ..self.clone()
         }
     }
 
@@ -519,6 +536,7 @@ mod tests {
             },
             selected_task: None,
             message: DisplayMessage::None,
+            mode: Mode::List,
         }
     }
 

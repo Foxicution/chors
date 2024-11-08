@@ -32,31 +32,35 @@ impl UpdateResult {
 pub fn update(message: &Message, model: &Model, history: &mut History) -> Model {
     let result = match &message {
         // Task management
-        Message::AddSiblingTask { task } => model
+        Message::AddSiblingTask(task) => model
             .with_sibling_task(task.clone())
             .map(|new_model| UpdateResult::new(new_model).with_message("Added sibling task.")),
 
-        Message::AddChildTask { task } => model
+        Message::AddChildTask(task) => model
             .with_child_task(task.clone())
             .map(|new_model| UpdateResult::new(new_model).with_message("Added child task.")),
 
-        Message::RemoveTask { path } => model
+        Message::RemoveTask(path) => model
             .with_removed_task(path)
             .map(|new_model| UpdateResult::new(new_model).with_message("Removed task.")),
 
         // Filter management
-        Message::AddFilter { filter } => Ok(model.with_filter(filter.clone()))
+        Message::AddFilter(filter) => Ok(model.with_filter(filter.clone()))
             .map(|new_model| UpdateResult::new(new_model).with_message("Added new filter.")),
 
-        Message::SelectFilter { filter_id } => model
+        Message::SelectFilter(filter_id) => model
             .with_filter_select(*filter_id)
             .map(|new_model| UpdateResult::new(new_model).with_message("Selected filter.")),
 
-        Message::ApplyFilter { filter } => Ok(model.with_filter_condition(filter.clone()))
+        Message::ApplyFilter(filter) => Ok(model.with_filter_condition(filter.clone()))
             .map(|new_model| UpdateResult::new(new_model).with_message("Selected filter")),
 
         // Navigation
-        Message::Navigate { direction } => Ok(model.with_selection_moved(direction))
+        Message::Navigate(direction) => Ok(model.with_selection_moved(direction))
+            .map(|new_model| UpdateResult::new(new_model).without_history()),
+
+        // Modes
+        Message::SwitchMode(mode) => Ok(model.with_mode(mode.clone()))
             .map(|new_model| UpdateResult::new(new_model).without_history()),
 
         // History
@@ -133,7 +137,7 @@ mod tests {
         model = model.with_filter(filter);
 
         // Select the new filter
-        let model = update(&Message::SelectFilter { filter_id }, &model, &mut history);
+        let model = update(&Message::SelectFilter(filter_id), &model, &mut history);
 
         // Verify that the selected filter is applied
         assert_eq!(model.selected_filter_id.unwrap(), filter_id);
@@ -153,9 +157,7 @@ mod tests {
 
         // Apply the filter directly
         let model = update(
-            &Message::ApplyFilter {
-                filter: filter_condition.clone(),
-            },
+            &Message::ApplyFilter(filter_condition.clone()),
             &model,
             &mut history,
         );
@@ -178,26 +180,14 @@ mod tests {
         assert!(model.selected_task.is_none());
 
         // Navigate down (should select the first task)
-        let model = update(
-            &Message::Navigate {
-                direction: Direction::Down,
-            },
-            &model,
-            &mut history,
-        );
+        let model = update(&Message::Navigate(Direction::Down), &model, &mut history);
         assert_eq!(
             model.selected_task.unwrap(),
             *model.filtered_tasks.get_key_at_index(0).unwrap()
         );
 
         // Navigate up from the first task (should wrap around to the last task)
-        let model = update(
-            &Message::Navigate {
-                direction: Direction::Up,
-            },
-            &model,
-            &mut history,
-        );
+        let model = update(&Message::Navigate(Direction::Up), &model, &mut history);
         assert_eq!(
             model.selected_task.unwrap(),
             *model
@@ -207,13 +197,7 @@ mod tests {
         );
 
         // Navigate down from the last task (should wrap around to the first task)
-        let model = update(
-            &Message::Navigate {
-                direction: Direction::Down,
-            },
-            &model,
-            &mut history,
-        );
+        let model = update(&Message::Navigate(Direction::Down), &model, &mut history);
         assert_eq!(
             model.selected_task.unwrap(),
             *model.filtered_tasks.get_key_at_index(0).unwrap()
@@ -232,9 +216,7 @@ mod tests {
         // Add sibling task through Message
         let new_task = Task::new("New Sibling Task");
         let model = update(
-            &Message::AddSiblingTask {
-                task: new_task.clone(),
-            },
+            &Message::AddSiblingTask(new_task.clone()),
             &model,
             &mut history,
         );
@@ -258,9 +240,7 @@ mod tests {
         // Add child task through Message
         let child_task = Task::new("Child Task");
         let model = update(
-            &Message::AddChildTask {
-                task: child_task.clone(),
-            },
+            &Message::AddChildTask(child_task.clone()),
             &model,
             &mut history,
         );
@@ -285,9 +265,7 @@ mod tests {
         // Try to add a child task through Message (should result in an error)
         let child_task = Task::new("Child Task");
         let model = update(
-            &Message::AddChildTask {
-                task: child_task.clone(),
-            },
+            &Message::AddChildTask(child_task.clone()),
             &model,
             &mut history,
         );
@@ -311,9 +289,7 @@ mod tests {
 
         // Remove task2 and verify selection update
         let model = update(
-            &Message::RemoveTask {
-                path: vec![model.selected_task.unwrap()],
-            },
+            &Message::RemoveTask(vec![model.selected_task.unwrap()]),
             &model,
             &mut history,
         );
@@ -351,7 +327,7 @@ mod tests {
         let filter = FilterCondition::new(filter_expr).unwrap();
 
         // Update filtered_tasks through Message
-        let model = update(&Message::ApplyFilter { filter }, &model, &mut history);
+        let model = update(&Message::ApplyFilter(filter), &model, &mut history);
 
         // Expected to match task1 and task4
         assert!(model.filtered_tasks.contains_key(&task1.id));
@@ -367,11 +343,7 @@ mod tests {
         let task = Task::new("New Task");
 
         // Perform an action
-        let model = update(
-            &Message::AddSiblingTask { task: task.clone() },
-            &model,
-            &mut history,
-        );
+        let model = update(&Message::AddSiblingTask(task.clone()), &model, &mut history);
 
         // Undo the action
         let model = update(&Message::Undo, &model, &mut history);
@@ -417,11 +389,7 @@ mod tests {
         let mut history = History::new(100);
         let task = Task::new("New Task");
 
-        let updated_model = update(
-            &Message::AddSiblingTask { task: task.clone() },
-            &model,
-            &mut history,
-        );
+        let updated_model = update(&Message::AddSiblingTask(task.clone()), &model, &mut history);
 
         assert_eq!(
             updated_model.message.as_str().unwrap(),
@@ -430,7 +398,7 @@ mod tests {
         assert_eq!(history.undo_stack.len(), 1);
         assert_eq!(
             history.undo_stack.back().unwrap().1,
-            Message::AddSiblingTask { task }
+            Message::AddSiblingTask(task)
         );
     }
 
@@ -441,11 +409,7 @@ mod tests {
         let task = Task::new("New Task");
 
         // Perform an action
-        let model = update(
-            &Message::AddSiblingTask { task: task.clone() },
-            &model,
-            &mut history,
-        );
+        let model = update(&Message::AddSiblingTask(task.clone()), &model, &mut history);
 
         // Undo the action
         let model = update(&Message::Undo, &model, &mut history);

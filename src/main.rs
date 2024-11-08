@@ -3,9 +3,9 @@ mod tui;
 mod update;
 mod utils;
 
-// use model::filter::{Filter, FilterCondition};
-// use model::model::Model;
-// use model::task::Task;
-// use update::{message::Message, update::update};
+use color_eyre::Result;
+use tui::run::run;
 
-fn main() {}
+fn main() -> Result<()> {
+    run()
+}

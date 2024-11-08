@@ -5,3 +5,4 @@ pub mod update;
 
 pub use history::History;
 pub use message::{Direction, Message};
+pub use update::update;

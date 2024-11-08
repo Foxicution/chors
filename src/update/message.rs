@@ -1,21 +1,24 @@
 use uuid::Uuid;
 
-use crate::model::{Filter, FilterCondition, Task};
+use crate::model::{Filter, FilterCondition, Mode, Task};
 
 #[derive(Debug, Clone)]
 pub enum Message {
     // Task management
-    AddSiblingTask { task: Task },
-    AddChildTask { task: Task },
-    RemoveTask { path: Vec<Uuid> },
+    AddSiblingTask(Task),
+    AddChildTask(Task),
+    RemoveTask(Vec<Uuid>),
 
     // Filter management
-    AddFilter { filter: Filter },
-    SelectFilter { filter_id: Uuid },
-    ApplyFilter { filter: FilterCondition },
+    AddFilter(Filter),
+    SelectFilter(Uuid),
+    ApplyFilter(FilterCondition),
 
     // Navigation
-    Navigate { direction: Direction },
+    Navigate(Direction),
+
+    // Modes
+    SwitchMode(Mode),
 
     // History
     Undo,
@@ -27,18 +30,13 @@ impl PartialEq for Message {
         match (self, other) {
             (Message::Undo, Message::Undo) => true,
             (Message::Redo, Message::Redo) => true,
-            (Message::AddSiblingTask { task: t1 }, Message::AddSiblingTask { task: t2 }) => {
-                t1 == t2
-            }
-            (Message::AddChildTask { task: t1 }, Message::AddChildTask { task: t2 }) => t1 == t2,
-            (Message::RemoveTask { path: p1 }, Message::RemoveTask { path: p2 }) => p1 == p2,
-            (Message::AddFilter { filter: f1 }, Message::AddFilter { filter: f2 }) => f1 == f2,
-            (
-                Message::SelectFilter { filter_id: id1 },
-                Message::SelectFilter { filter_id: id2 },
-            ) => id1 == id2,
-            (Message::ApplyFilter { filter: f1 }, Message::ApplyFilter { filter: f2 }) => f1 == f2,
-            (Message::Navigate { direction: d1 }, Message::Navigate { direction: d2 }) => d1 == d2,
+            (Message::AddSiblingTask(t1), Message::AddSiblingTask(t2)) => t1 == t2,
+            (Message::AddChildTask(t1), Message::AddChildTask(t2)) => t1 == t2,
+            (Message::RemoveTask(p1), Message::RemoveTask(p2)) => p1 == p2,
+            (Message::AddFilter(f1), Message::AddFilter(f2)) => f1 == f2,
+            (Message::SelectFilter(id1), Message::SelectFilter(id2)) => id1 == id2,
+            (Message::ApplyFilter(f1), Message::ApplyFilter(f2)) => f1 == f2,
+            (Message::Navigate(d1), Message::Navigate(d2)) => d1 == d2,
             _ => false,
         }
     }
