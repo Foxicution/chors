@@ -132,6 +132,14 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
     pub fn keys_to_vec(&self) -> Vec<K> {
         self.order.to_vec()
     }
+
+    pub fn values(&self) -> Vector<V> {
+        self.order
+            .iter()
+            .filter_map(|key| self.map.get(key))
+            .cloned()
+            .collect()
+    }
 }
 
 impl<K: Eq + Hash + Clone, V: Clone> FromIterator<(K, V)> for PersistentIndexMap<K, V> {
