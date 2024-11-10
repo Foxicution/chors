@@ -107,6 +107,7 @@ impl Model {
     pub fn with_overlay(&self, overlay: Overlay) -> Self {
         Self {
             overlay,
+            input: String::new(),
             ..self.clone()
         }
     }
@@ -118,7 +119,7 @@ impl Model {
     ) -> Result<Self, String> {
         let new_tasks = modify_task_at_path(&self.tasks, path, modify_fn)?;
 
-        let filtered_tasks = filter_tasks(&self.tasks, &self.current_filter.condition);
+        let filtered_tasks = filter_tasks(&new_tasks, &self.current_filter.condition);
         let selected_task = self.get_new_selection(&filtered_tasks, None);
 
         Ok(Self {
@@ -333,6 +334,13 @@ impl Model {
     pub fn with_error<S: Into<String>>(&self, message: S) -> Self {
         Self {
             message: DisplayMessage::Error(message.into()),
+            ..self.clone()
+        }
+    }
+
+    pub fn with_no_message(&self) -> Self {
+        Self {
+            message: DisplayMessage::None,
             ..self.clone()
         }
     }

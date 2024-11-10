@@ -1,5 +1,5 @@
 use crate::{
-    model::Model,
+    model::{Model, Overlay},
     update::{History, Message},
 };
 
@@ -33,10 +33,12 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
     let result = match &message {
         // Task management
         Message::AddSiblingTask(task) => model
+            .with_overlay(Overlay::None)
             .with_sibling_task(task.clone())
             .map(|new_model| UpdateResult::new(new_model).with_message("Added sibling task.")),
 
         Message::AddChildTask(task) => model
+            .with_overlay(Overlay::None)
             .with_child_task(task.clone())
             .map(|new_model| UpdateResult::new(new_model).with_message("Added child task.")),
 
@@ -64,7 +66,14 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
             .map(|new_model| UpdateResult::new(new_model).without_history()),
 
         // Modes
-        Message::SwitchMode(mode) => Ok(model.with_mode(mode.clone()))
+        Message::SetMode(mode) => Ok(model.with_mode(mode.clone()))
+            .map(|new_model| UpdateResult::new(new_model).without_history()),
+
+        Message::SetOverlay(overlay) => Ok(model.with_overlay(overlay.clone()))
+            .map(|new_model| UpdateResult::new(new_model).without_history()),
+
+        // Input
+        Message::SetInput(input) => Ok(model.with_input(input.clone()))
             .map(|new_model| UpdateResult::new(new_model).without_history()),
 
         // History
@@ -102,11 +111,11 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
     match result {
         Ok(update_result) => {
             if update_result.save_to_history {
-                history.push(&update_result.model, message)
+                history.push(&model.with_overlay(Overlay::None), message)
             }
             match update_result.message {
                 Some(msg) => update_result.model.with_success(msg),
-                None => update_result.model,
+                None => update_result.model.with_no_message(),
             }
         }
         Err(error_message) => model.with_error(error_message),

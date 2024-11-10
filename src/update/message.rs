@@ -23,7 +23,6 @@ pub enum Message {
 
     // Input
     SetInput(String),
-    PopChar,
 
     // History
     Undo,
@@ -53,7 +52,6 @@ impl PartialEq for Message {
 
             // Input
             (Message::SetInput(i1), Message::SetInput(i2)) => i1 == i2,
-            (Message::PopChar, Message::PopChar) => true,
 
             // History
             (Message::Undo, Message::Undo) => true,

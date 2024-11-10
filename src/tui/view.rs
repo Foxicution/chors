@@ -1,5 +1,5 @@
 use crate::{
-    model::{Mode, Model},
+    model::{DisplayMessage, Mode, Model, Overlay},
     utils::VectorUtils,
 };
 use crossterm::{
@@ -119,10 +119,26 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
     let info_area = Rect::new(size.x, size.height - STATUS_HEIGHT, size.width, INFO_HEIGHT);
     let input_area = Rect::new(size.x, size.height - INPUT_HEIGHT, size.width, INPUT_HEIGHT);
 
-    let info_paragraph = Paragraph::new(Span::from(" Test!"))
-        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+    let info_paragraph =
+        Paragraph::new(" Test!").style(Style::default().bg(Color::DarkGray).fg(Color::White));
+
+    let input_paragraph = if model.overlay != Overlay::None {
+        frame.set_cursor(input_area.x + model.input.len() as u16, input_area.y);
+        Paragraph::new(Span::from(model.input.clone()))
+    } else {
+        match model.message.clone() {
+            DisplayMessage::None => Paragraph::new(""),
+            DisplayMessage::Success(msg) => {
+                Paragraph::new(msg).style(Style::default().fg(Color::Green))
+            }
+            DisplayMessage::Error(msg) => {
+                Paragraph::new(msg).style(Style::default().fg(Color::Red))
+            }
+        }
+    };
 
     frame.render_widget(info_paragraph, info_area);
+    frame.render_widget(input_paragraph, input_area);
 }
 
 pub fn init() -> io::Result<Tui> {
