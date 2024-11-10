@@ -10,6 +10,12 @@ use rpds::Vector;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum Overlay {
+    AddingSiblingTask,
+    None,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Mode {
     List,
     Quit,
@@ -56,6 +62,8 @@ pub struct Model {
     pub message: DisplayMessage,
 
     pub mode: Mode,
+    pub overlay: Overlay,
+    pub input: String,
 }
 
 impl Model {
@@ -77,12 +85,28 @@ impl Model {
             message: DisplayMessage::None,
 
             mode: Mode::List,
+            overlay: Overlay::None,
+            input: String::new(),
+        }
+    }
+
+    pub fn with_input(&self, input: String) -> Self {
+        Self {
+            input,
+            ..self.clone()
         }
     }
 
     pub fn with_mode(&self, mode: Mode) -> Self {
         Self {
             mode,
+            ..self.clone()
+        }
+    }
+
+    pub fn with_overlay(&self, overlay: Overlay) -> Self {
+        Self {
+            overlay,
             ..self.clone()
         }
     }
@@ -597,6 +621,8 @@ mod tests {
             selected_task: None,
             message: DisplayMessage::None,
             mode: Mode::List,
+            overlay: Overlay::None,
+            input: String::new(),
         }
     }
 
