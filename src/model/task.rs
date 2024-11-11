@@ -261,10 +261,10 @@ mod tests {
         // Flip the completed status again
         let uncompleted_task = completed_task.with_flip_completed();
 
-        // Test that both the task and its subtasks are unmarked again
+        // Test that both the task is uncompleted, but its subtasks are completed
         assert!(uncompleted_task.completed.is_none());
         for (_, subtask) in uncompleted_task.subtasks.iter() {
-            assert!(subtask.completed.is_none());
+            assert!(subtask.completed.is_some());
         }
     }
 

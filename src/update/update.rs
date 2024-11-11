@@ -392,7 +392,7 @@ mod tests {
         assert!(model.tasks.contains_key(&task.id));
         assert_eq!(
             model.message.as_str().unwrap(),
-            format!("Redid action: AddSiblingTask {{ task: {:?} }}", task)
+            format!("Redid action: AddSiblingTask({:?})", task)
         );
     }
 
@@ -453,7 +453,7 @@ mod tests {
 
         assert_eq!(
             model.message.as_str().unwrap(),
-            format!("Undid action: AddSiblingTask {{ task: {:?} }}", task)
+            format!("Undid action: AddSiblingTask({:?})", task)
         );
         assert_eq!(history.undo_stack.len(), 0);
     }
