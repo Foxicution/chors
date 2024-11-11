@@ -6,12 +6,14 @@ use crate::{
     update::Direction,
     utils::{PersistentIndexMap, VectorUtils},
 };
+use chrono::Utc;
 use rpds::Vector;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Overlay {
     AddingSiblingTask,
+    AddingChildTask,
     None,
 }
 
@@ -63,7 +65,9 @@ pub struct Model {
 
     pub mode: Mode,
     pub overlay: Overlay,
+
     pub input: String,
+    pub cursor: usize,
 }
 
 impl Model {
@@ -86,7 +90,114 @@ impl Model {
 
             mode: Mode::List,
             overlay: Overlay::None,
+
             input: String::new(),
+            cursor: 0,
+        }
+    }
+
+    pub fn with_cursor_jump_word(&self, direction: &Direction) -> Self {
+        let is_boundary = |c: char| c.is_whitespace() || c == '@' || c == '#';
+
+        let new_cursor = match direction {
+            Direction::Up => {
+                let trimmed_input = &self.input[..self.cursor];
+
+                if let Some(start_of_word) = trimmed_input.rfind(|c| !is_boundary(c)) {
+                    // Check if the cursor is already at the start of the current word
+                    if self.cursor > start_of_word + 1 {
+                        trimmed_input[..start_of_word + 1]
+                            .rfind(is_boundary)
+                            .map_or(0, |i| i + 1)
+                    } else {
+                        // Move to the start of the previous word
+                        trimmed_input[..start_of_word]
+                            .rfind(is_boundary)
+                            .map_or(0, |i| i + 1)
+                    }
+                } else {
+                    0 // No previous word boundary, go to the start
+                }
+            }
+            Direction::Down => {
+                let remaining_input = &self.input[self.cursor..];
+
+                if let Some(end_of_word) = remaining_input.find(|c| !is_boundary(c)) {
+                    // Move right to the end of the current word or to the next word's start
+                    let after_word_boundary = end_of_word
+                        + remaining_input[end_of_word..]
+                            .find(is_boundary)
+                            .unwrap_or(remaining_input.len());
+
+                    self.cursor + after_word_boundary
+                } else {
+                    self.input.len() // No next word boundary, go to the end
+                }
+            }
+        };
+
+        Self {
+            cursor: new_cursor.max(0).min(self.input.len()),
+            ..self.clone()
+        }
+    }
+
+    pub fn with_popped_char(&self) -> Self {
+        if self.cursor == 0 || self.input.is_empty() {
+            return self.clone();
+        }
+        let mut input = self.input.clone();
+        input.remove(self.cursor - 1);
+        Self {
+            input,
+            cursor: self.cursor - 1,
+            ..self.clone()
+        }
+    }
+
+    pub fn with_popped_word(&self) -> Self {
+        if self.cursor == 0 || self.input.is_empty() {
+            return self.clone(); // If at the beginning or empty, no-op
+        }
+        let mut input = self.input[..self.cursor].to_string();
+        let trimmed_input = input.trim_end();
+        let last_space = trimmed_input.rfind(' ').unwrap_or(0);
+        input.truncate(last_space);
+        input.push_str(&self.input[self.cursor..]); // Preserve the text after the cursor
+        Self {
+            input,
+            cursor: last_space,
+            ..self.clone()
+        }
+    }
+
+    pub fn with_inserted_char(&self, ch: char) -> Self {
+        let mut input = self.input.clone();
+        input.insert(self.cursor, ch);
+
+        Self {
+            input,
+            cursor: self.cursor + 1,
+            ..self.clone()
+        }
+    }
+
+    pub fn with_move_cursor(&self, direction: &Direction) -> Self {
+        let cursor = match direction {
+            Direction::Down => (self.cursor + 1).min(self.input.len()),
+            Direction::Up => (self.cursor - 1).max(0),
+        };
+
+        Self {
+            cursor,
+            ..self.clone()
+        }
+    }
+
+    pub fn with_cursor(&self, position: usize) -> Self {
+        Self {
+            cursor: position.min(self.input.len()),
+            ..self.clone()
         }
     }
 
@@ -108,6 +219,7 @@ impl Model {
         Self {
             overlay,
             input: String::new(),
+            cursor: 0,
             ..self.clone()
         }
     }
@@ -131,7 +243,17 @@ impl Model {
     }
 
     pub fn with_flipped_completion(&self, path: &[Uuid]) -> Result<Self, String> {
-        self.with_modified_task(path, |task| task.with_flip_completed())
+        let new_tasks = flip_task_and_update_parents(&self.tasks, path)?;
+
+        let filtered_tasks = filter_tasks(&new_tasks, &self.current_filter.condition);
+        let selected_task = self.get_new_selection(&filtered_tasks, None);
+
+        Ok(Self {
+            tasks: new_tasks,
+            filtered_tasks,
+            selected_task,
+            ..self.clone()
+        })
     }
 
     pub fn with_removed_task(&self, path: &[Uuid]) -> Result<Self, String> {
@@ -198,22 +320,31 @@ impl Model {
     }
 
     pub fn with_sibling_task(&self, task: Task) -> Result<Self, String> {
-        let new_tasks = match self.get_path() {
-            Some(path) if path.len() >= 2 => insert_task_at_path(
-                &self.tasks,
-                &path.drop_last().unwrap().to_vec(),
-                task.clone(),
-            )?,
-            _ => self.tasks.insert(*task.id, task.clone()),
-        };
+        match self.get_path() {
+            Some(path) if path.len() >= 2 => {
+                let parent_path = path.drop_last().unwrap();
+                let new_tasks = insert_task_and_uncomplete_parents(
+                    &self.tasks,
+                    &parent_path.to_vec(),
+                    task.clone(),
+                )?;
+                Ok(self.with_tasks(new_tasks, Some(*task.id)))
+            }
+            _ => {
+                // Adding a sibling to a root task or when no task is selected
+                let mut new_tasks = self.tasks.clone();
+                new_tasks = new_tasks.insert(*task.id, task.clone());
 
-        Ok(self.with_tasks(new_tasks, Some(*task.id)))
+                Ok(self.with_tasks(new_tasks, Some(*task.id)))
+            }
+        }
     }
 
     pub fn with_child_task(&self, task: Task) -> Result<Self, String> {
         match self.get_path() {
-            Some(path) if path.len() >= 1 => {
-                let new_tasks = insert_task_at_path(&self.tasks, &path.to_vec(), task.clone())?;
+            Some(path) if !path.is_empty() => {
+                let new_tasks =
+                    insert_task_and_uncomplete_parents(&self.tasks, &path.to_vec(), task.clone())?;
                 Ok(self.with_tasks(new_tasks, Some(*task.id)))
             }
             _ => Err("Can't insert a child task with no parent task selected".to_string()),
@@ -545,6 +676,88 @@ fn filter_tasks_include_all(
     }
 }
 
+fn flip_task_and_update_parents(
+    tasks: &PersistentIndexMap<Uuid, Task>,
+    path: &[Uuid],
+) -> Result<PersistentIndexMap<Uuid, Task>, String> {
+    if path.is_empty() {
+        return Err("Path is empty; cannot flip task completion".to_string());
+    }
+
+    let (current_id, rest_of_path) = path.split_first().unwrap();
+
+    if let Some(task) = tasks.get(current_id) {
+        if rest_of_path.is_empty() {
+            // Base case: Flip the completion status of this task
+            let new_task = task.with_flip_completed();
+            Ok(tasks.insert(*current_id, new_task))
+        } else {
+            // Recursive case: Recurse into subtasks
+            let new_subtasks = flip_task_and_update_parents(&task.subtasks, rest_of_path)?;
+
+            // Update the current task's completion status based on new_subtasks
+            let all_subtasks_completed = new_subtasks
+                .iter()
+                .all(|(_, subtask)| subtask.completed.is_some());
+
+            let new_completed = if all_subtasks_completed {
+                Some(Utc::now())
+            } else {
+                None
+            };
+
+            let new_task = Task {
+                completed: new_completed.into(),
+                subtasks: new_subtasks,
+                ..task.clone()
+            };
+
+            Ok(tasks.insert(*current_id, new_task))
+        }
+    } else {
+        Err(format!("Task with ID {} not found", current_id))
+    }
+}
+
+fn insert_task_and_uncomplete_parents(
+    tasks: &PersistentIndexMap<Uuid, Task>,
+    path: &[Uuid],
+    task_to_insert: Task,
+) -> Result<PersistentIndexMap<Uuid, Task>, String> {
+    if path.is_empty() {
+        // Insert at the root level
+        Ok(tasks.insert(*task_to_insert.id, task_to_insert))
+    } else {
+        let (current_id, rest_of_path) = path.split_first().unwrap();
+
+        if let Some(current_task) = tasks.get(current_id) {
+            // Recursively insert into subtasks
+            let new_subtasks = insert_task_and_uncomplete_parents(
+                &current_task.subtasks,
+                rest_of_path,
+                task_to_insert,
+            )?;
+
+            // Uncomplete the current task if it was completed
+            let new_completed = if current_task.completed.is_some() {
+                None
+            } else {
+                *current_task.completed.clone()
+            };
+
+            let new_task = Task {
+                subtasks: new_subtasks,
+                completed: new_completed.into(),
+                ..current_task.clone()
+            };
+
+            Ok(tasks.insert(*current_id, new_task))
+        } else {
+            Err(format!("Task with ID {} not found", current_id))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rpds::vector;
@@ -631,6 +844,7 @@ mod tests {
             mode: Mode::List,
             overlay: Overlay::None,
             input: String::new(),
+            cursor: 0,
         }
     }
 

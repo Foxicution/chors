@@ -53,32 +53,49 @@ impl Task {
         }
     }
 
-    /// Flip the task and all tasks between completed/uncompleted
+    /// Flip the task's completion status.
+    /// - If flipping to completed:
+    ///     - Mark the task as completed.
+    ///     - Recursively mark incomplete subtasks as completed.
+    /// - If flipping to incomplete:
+    ///     - Mark the task as incomplete.
+    ///     - Subtasks remain unchanged.
     pub fn with_flip_completed(&self) -> Self {
-        // Determine the new completion status by flipping the current one
-        let new_completed = if self.completed.is_some() {
-            None // Currently completed, so unmark it
+        let currently_completed = self.completed.is_some();
+        let new_completed = if currently_completed {
+            None // Flip to incomplete
         } else {
-            Some(Utc::now()) // Currently uncompleted, so mark it as completed
+            Some(Utc::now()) // Flip to completed
         };
 
-        // Traverse and flip the completion status of tasks
-        let new_subtasks =
-            self.subtasks
-                .keys()
+        if new_completed.is_some() {
+            // Flipping to completed
+            // Recursively mark incomplete subtasks as completed
+            let new_subtasks: PersistentIndexMap<Uuid, Task> = self
+                .subtasks
                 .iter()
-                .fold(PersistentIndexMap::new(), |acc, key| {
-                    let subtask = self.subtasks.get(key).unwrap();
-                    acc.insert(*key, subtask.with_flip_completed())
-                });
+                .map(|(key, subtask)| {
+                    let new_subtask = if subtask.completed.is_some() {
+                        subtask.clone()
+                    } else {
+                        subtask.with_flip_completed()
+                    };
+                    (*key, new_subtask)
+                })
+                .collect();
 
-        Task {
-            id: Rc::clone(&self.id),
-            description: Rc::clone(&self.description),
-            tags: self.tags.clone(),
-            contexts: self.contexts.clone(),
-            completed: Rc::new(new_completed),
-            subtasks: new_subtasks,
+            Task {
+                completed: new_completed.into(),
+                subtasks: new_subtasks,
+                ..self.clone()
+            }
+        } else {
+            // Flipping to incomplete
+            // Do not change the subtasks
+            Task {
+                completed: new_completed.into(),
+                ..self.clone()
+            }
         }
     }
 }

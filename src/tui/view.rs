@@ -82,25 +82,26 @@ fn render_list_mode(frame: &mut Frame, model: &Model, size: Rect) {
                     description_spans.push(Span::raw(word));
                 }
                 description_spans.push(Span::raw(" "));
-
-                let total_subtasks = task.subtasks.len();
-                if total_subtasks > 0 {
-                    let completed_subtasks = task
-                        .subtasks
-                        .iter()
-                        .filter(|(_, t)| t.completed.is_some())
-                        .count();
-                    let color = if completed_subtasks == total_subtasks {
-                        Color::Green
-                    } else {
-                        Color::Yellow
-                    };
-                    description_spans.push(Span::styled(
-                        format!("[{}/{}]", completed_subtasks, total_subtasks),
-                        Style::default().fg(color),
-                    ));
-                }
             }
+
+            let total_subtasks = task.subtasks.len();
+            if total_subtasks > 0 {
+                let completed_subtasks = task
+                    .subtasks
+                    .iter()
+                    .filter(|(_, t)| t.completed.is_some())
+                    .count();
+                let color = if completed_subtasks == total_subtasks {
+                    Color::Green
+                } else {
+                    Color::Yellow
+                };
+                description_spans.push(Span::styled(
+                    format!("[{}/{}]", completed_subtasks, total_subtasks),
+                    Style::default().fg(color),
+                ));
+            }
+
             ListItem::new(Line::from(description_spans))
         });
 
@@ -123,7 +124,7 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
         Paragraph::new(" Test!").style(Style::default().bg(Color::DarkGray).fg(Color::White));
 
     let input_paragraph = if model.overlay != Overlay::None {
-        frame.set_cursor(input_area.x + model.input.len() as u16, input_area.y);
+        frame.set_cursor(model.cursor as u16, input_area.y);
         Paragraph::new(Span::from(model.input.clone()))
     } else {
         match model.message.clone() {

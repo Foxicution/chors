@@ -8,7 +8,7 @@ use crate::{
     utils::VectorUtils,
 };
 use color_eyre::{eyre::Ok, Result};
-use crossterm::event::{poll, read, Event, KeyCode, KeyEventKind};
+use crossterm::event::{poll, read, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{backend::Backend, Terminal};
 use std::time::Duration;
 
@@ -47,7 +47,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut model: Model) -> Result<M
     }
 }
 
-fn keycode_to_message(model: &Model, key: KeyCode) -> Option<Message> {
+fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> Option<Message> {
     let message = match model.overlay {
         Overlay::None => match model.mode {
             Mode::List => match key {
@@ -55,6 +55,7 @@ fn keycode_to_message(model: &Model, key: KeyCode) -> Option<Message> {
                 KeyCode::Char('j') => Message::Navigate(Direction::Down),
                 KeyCode::Char('k') => Message::Navigate(Direction::Up),
                 KeyCode::Char('a') => Message::SetOverlay(Overlay::AddingSiblingTask),
+                KeyCode::Char('A') => Message::SetOverlay(Overlay::AddingChildTask),
                 KeyCode::Char('c') => Message::FlipCompleted(model.get_path()?.to_vec()),
                 KeyCode::Char('u') => Message::Undo,
                 KeyCode::Char('U') => Message::Redo,
@@ -62,12 +63,29 @@ fn keycode_to_message(model: &Model, key: KeyCode) -> Option<Message> {
             },
             Mode::Quit => return None,
         },
-        Overlay::AddingSiblingTask => match key {
-            KeyCode::Enter => Message::AddSiblingTask(Task::new(model.input.clone())),
-            KeyCode::Char(ch) => Message::SetInput(format!("{}{}", model.input, ch)),
-            KeyCode::Backspace if !model.input.is_empty() => {
-                Message::SetInput(model.input[..model.input.len() - 1].into())
+        Overlay::AddingSiblingTask | Overlay::AddingChildTask => match key {
+            KeyCode::Enter => {
+                let task = Task::new(model.input.clone());
+                match model.overlay {
+                    Overlay::AddingSiblingTask => Message::AddSiblingTask(task),
+                    Overlay::AddingChildTask => Message::AddChildTask(task),
+                    Overlay::None => return None,
+                }
             }
+            KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
+            KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
+            KeyCode::Backspace => Message::PopChar,
+            KeyCode::Left if modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::JumpWord(Direction::Up)
+            }
+            KeyCode::Right if modifiers.contains(KeyModifiers::CONTROL) => {
+                Message::JumpWord(Direction::Down)
+            }
+            KeyCode::Left => Message::Move(Direction::Up),
+            KeyCode::Right => Message::Move(Direction::Down),
+            KeyCode::Home => Message::JumpStart,
+            KeyCode::End => Message::JumpEnd,
+            KeyCode::Char(ch) => Message::AddChar(ch),
             KeyCode::Esc => Message::SetOverlay(Overlay::None),
             _ => return None,
         },
@@ -83,7 +101,7 @@ fn poll_for_event() -> Result<bool> {
 fn handle_key_event(model: &Model) -> Result<Option<Message>> {
     if let Event::Key(key) = read()? {
         if key.kind == KeyEventKind::Press {
-            return Ok(keycode_to_message(model, key.code));
+            return Ok(keycode_to_message(model, key.code, key.modifiers));
         }
     }
     Ok(None)
