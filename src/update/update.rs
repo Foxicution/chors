@@ -90,7 +90,7 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
             Message::JumpWord(direction) => Ok(model.with_cursor_jump_word(direction))
                 .map(|m| UpdateResult::new(m).without_history()),
 
-            Message::Move(direction) => Ok(model.with_move_cursor(direction))
+            Message::Move(direction) => Ok(model.with_cursor_move(direction))
                 .map(|m| UpdateResult::new(m).without_history()),
 
             Message::JumpStart => {

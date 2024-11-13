@@ -182,10 +182,10 @@ impl Model {
         }
     }
 
-    pub fn with_move_cursor(&self, direction: &Direction) -> Self {
+    pub fn with_cursor_move(&self, direction: &Direction) -> Self {
         let cursor = match direction {
             Direction::Down => (self.cursor + 1).min(self.input.len()),
-            Direction::Up => (self.cursor - 1).max(0),
+            Direction::Up => self.cursor.saturating_sub(1),
         };
 
         Self {

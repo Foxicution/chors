@@ -1,4 +1,7 @@
-use crate::utils::PersistentIndexMap;
+use crate::{
+    parse::{parse_context, parse_tag, parse_tokens, Token},
+    utils::PersistentIndexMap,
+};
 use chrono::{DateTime, Utc};
 use rpds::HashTrieSet;
 use std::rc::Rc;
@@ -115,13 +118,26 @@ impl PartialEq for Task {
 fn extract_tags_and_contexts(description: &str) -> (HashTrieSet<String>, HashTrieSet<String>) {
     let mut tags = HashTrieSet::new();
     let mut contexts = HashTrieSet::new();
-    for word in description.split_whitespace() {
-        if let Some(tag) = word.strip_prefix('#') {
-            tags = tags.insert(tag.to_string());
-        } else if let Some(context) = word.strip_prefix('@') {
-            contexts = contexts.insert(context.to_string());
+
+    match parse_tokens(description) {
+        Ok((_, tokens)) => {
+            for token in tokens {
+                match token {
+                    Token::Tag(tag_name) => {
+                        tags = tags.insert(tag_name.to_string());
+                    }
+                    Token::Context(context_name) => {
+                        contexts = contexts.insert(context_name.to_string());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Err(_) => {
+            // Handle parsing errors if necessary
         }
     }
+
     (tags, contexts)
 }
 

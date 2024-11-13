@@ -1,44 +1,64 @@
-use crate::model::Task;
+use crate::{
+    model::Task,
+    parse::{
+        parse_and_operator, parse_completed, parse_context, parse_incomplete, parse_not_operator,
+        parse_or_operator, parse_parenthesis, parse_quoted_text, parse_symbol, parse_tag,
+        parse_tokens, parse_whitespace, parse_word, Token,
+    },
+};
+use color_eyre::owo_colors::OwoColorize;
+use nom::{
+    branch::alt,
+    bytes::complete::{is_not, tag, tag_no_case, take_while1},
+    character::complete::{alphanumeric1, anychar, char, multispace1, one_of},
+    combinator::{map, opt, recognize},
+    multi::many0,
+    sequence::{delimited, preceded},
+    IResult,
+};
 use ratatui::{
     style::{Color, Style},
     text::Span,
 };
 
+/// Style a task for display.
 pub fn style_task(task: &Task, ident: usize) -> Vec<Span> {
-    let ident = "  ".repeat(ident);
+    let ident = "  ".repeat(ident); // Adds indentation based on the specified level.
     let status = if task.completed.is_some() {
         Span::styled("[x]", Style::default().fg(Color::Green))
     } else {
         Span::styled("[ ]", Style::default().fg(Color::Yellow))
     };
-    let mut description_spans = Vec::new();
-    description_spans.push(Span::raw(ident));
-    description_spans.push(status);
-    description_spans.push(Span::raw(" "));
 
-    for word in task.description.split_whitespace() {
-        if word.starts_with('#') {
-            description_spans.push(Span::styled(word, Style::default().fg(Color::Magenta)));
-        } else if word.starts_with('@') {
-            description_spans.push(Span::styled(word, Style::default().fg(Color::Cyan)));
-        } else {
-            description_spans.push(Span::raw(word));
+    // Start building the list of spans with indentation and status
+    let mut description_spans = vec![Span::raw(ident), status, Span::raw(" ")];
+
+    // Parse and style the task description
+    match parse_tokens(&task.description) {
+        Ok((_, tokens)) => {
+            description_spans.extend(tokens.into_iter().map(token_to_span));
         }
-        description_spans.push(Span::raw(" "));
+        Err(_) => {
+            // If parsing fails, treat the entire description as raw text
+            description_spans.push(Span::raw(task.description.to_string()));
+        }
     }
 
-    let total_subtasks = task.subtasks.len();
-    if total_subtasks > 0 {
+    // Add subtasks completion count if there are subtasks
+    if !task.subtasks.is_empty() {
+        let total_subtasks = task.subtasks.len();
         let completed_subtasks = task
             .subtasks
             .iter()
             .filter(|(_, t)| t.completed.is_some())
             .count();
+
         let color = if completed_subtasks == total_subtasks {
             Color::Green
         } else {
             Color::Yellow
         };
+
         description_spans.push(Span::styled(
             format!("[{}/{}]", completed_subtasks, total_subtasks),
             Style::default().fg(color),
@@ -48,156 +68,189 @@ pub fn style_task(task: &Task, ident: usize) -> Vec<Span> {
     description_spans
 }
 
+/// Style the input task description using `nom` parsers.
 pub fn style_input_task(input: &str) -> Vec<Span> {
-    let mut spans = Vec::new();
-    let mut chars = input.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        match c {
-            '#' => {
-                // Style words starting with #
-                let mut tag = String::new();
-                tag.push(c);
-                while let Some(&next_c) = chars.peek() {
-                    if next_c.is_whitespace() {
-                        break;
-                    }
-                    tag.push(chars.next().unwrap());
-                }
-                spans.push(Span::styled(tag, Style::default().fg(Color::Magenta)));
-            }
-            '@' => {
-                // Style words starting with @
-                let mut context = String::new();
-                context.push(c);
-                while let Some(&next_c) = chars.peek() {
-                    if next_c.is_whitespace() {
-                        break;
-                    }
-                    context.push(chars.next().unwrap());
-                }
-                spans.push(Span::styled(context, Style::default().fg(Color::Cyan)));
-            }
-            _ => {
-                // Add other text as raw, without styling
-                let mut word = c.to_string();
-                while let Some(&next_c) = chars.peek() {
-                    if next_c.is_whitespace() || "#@".contains(next_c) {
-                        break;
-                    }
-                    word.push(chars.next().unwrap());
-                }
-                spans.push(Span::raw(word));
-            }
-        }
-
-        // Preserve whitespace as raw spans
-        if c.is_whitespace() {
-            spans.push(Span::raw(c.to_string()));
-        }
+    match parse_tokens(input) {
+        Ok((_, tokens)) => tokens.into_iter().map(token_to_span).collect(),
+        Err(_) => vec![Span::raw(input.to_string())],
     }
-
-    spans
 }
 
-pub fn style_input_filter(input: &str) -> Vec<Span> {
-    let mut spans = Vec::new();
-    let mut chars = input.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        match c {
-            // Brackets keep the default style
-            '(' | ')' => {
-                spans.push(Span::raw(c.to_string()));
-            }
-            '"' => {
-                // Strings denoted by ""
-                let mut string_content = String::new();
-                string_content.push(c);
-                while let Some(&next_c) = chars.peek() {
-                    string_content.push(chars.next().unwrap());
-                    if next_c == '"' {
-                        break;
-                    }
-                }
-                spans.push(Span::styled(
-                    string_content,
-                    Style::default().fg(Color::Green),
-                ));
-            }
-            '#' => {
-                // Words starting with #
-                let mut word = String::new();
-                word.push(c);
-                while let Some(&next_c) = chars.peek() {
-                    if next_c.is_whitespace() {
-                        break;
-                    }
-                    word.push(chars.next().unwrap());
-                }
-                spans.push(Span::styled(word, Style::default().fg(Color::Magenta)));
-            }
-            '@' => {
-                // Words starting with @
-                let mut word = String::new();
-                word.push(c);
-                while let Some(&next_c) = chars.peek() {
-                    if next_c.is_whitespace() {
-                        break;
-                    }
-                    word.push(chars.next().unwrap());
-                }
-                spans.push(Span::styled(word, Style::default().fg(Color::Cyan)));
-            }
-            '[' => {
-                // Constructs [ ] and [x]
-                let mut construct = String::new();
-                construct.push(c);
-                if let Some(&next_c) = chars.peek() {
-                    if next_c == 'x' || next_c == ' ' {
-                        construct.push(chars.next().unwrap());
-                        if let Some(&']') = chars.peek() {
-                            construct.push(chars.next().unwrap());
-                            let style = match construct.as_str() {
-                                "[x]" => Style::default().fg(Color::Green),
-                                "[ ]" => Style::default().fg(Color::Yellow),
-                                _ => Style::default(),
-                            };
-                            spans.push(Span::styled(construct, style));
-                        } else {
-                            spans.push(Span::raw(construct));
-                        }
-                    } else {
-                        spans.push(Span::raw(construct));
-                    }
-                } else {
-                    spans.push(Span::raw(construct));
-                }
-            }
-            _ => {
-                if c.is_whitespace() {
-                    spans.push(Span::raw(c.to_string()));
-                } else {
-                    // Words and keywords
-                    let mut word = c.to_string();
-                    while let Some(&next_c) = chars.peek() {
-                        if next_c.is_whitespace() || "()[]\"#@".contains(next_c) {
-                            break;
-                        }
-                        word.push(chars.next().unwrap());
-                    }
-                    match word.as_str() {
-                        "and" | "or" | "not" => {
-                            spans.push(Span::styled(word, Style::default().fg(Color::Blue)));
-                        }
-                        _ => {
-                            spans.push(Span::raw(word));
-                        }
-                    }
-                }
-            }
+fn token_to_span(token: Token) -> Span {
+    match token {
+        Token::Tag(tag) => Span::styled(format!("#{}", tag), Style::default().fg(Color::Magenta)),
+        Token::Context(context) => {
+            Span::styled(format!("@{}", context), Style::default().fg(Color::Cyan))
         }
+        Token::Word(word) => Span::raw(word.to_string()),
+        Token::Whitespace(ws) => Span::raw(ws.to_string()),
+        Token::Symbol(c) => Span::raw(c.to_string()),
+        // Handle other tokens if needed
+        _ => Span::raw(""),
+    }
+}
+
+/// Style the input filter string using `nom` parsers.
+pub fn style_input_filter(input: &str) -> Vec<Span> {
+    match parse_tokens(input) {
+        Ok((_, tokens)) => tokens.into_iter().map(token_to_filter_span).collect(),
+        Err(_) => vec![Span::raw(input.to_string())],
+    }
+}
+
+fn token_to_filter_span(token: Token) -> Span {
+    match token {
+        Token::Tag(tag) => Span::styled(format!("#{}", tag), Style::default().fg(Color::Magenta)),
+        Token::Context(context) => {
+            Span::styled(format!("@{}", context), Style::default().fg(Color::Cyan))
+        }
+        Token::NotOperator => Span::styled("not", Style::default().fg(Color::Red)),
+        Token::AndOperator => Span::styled("and", Style::default().fg(Color::Blue)),
+        Token::OrOperator => Span::styled("or", Style::default().fg(Color::Blue)),
+        Token::Completed => Span::styled("[x]", Style::default().fg(Color::Green)),
+        Token::Incomplete => Span::styled("[ ]", Style::default().fg(Color::Yellow)),
+        Token::QuotedText(text) => {
+            Span::styled(text.to_string(), Style::default().fg(Color::Green))
+        }
+        Token::Parenthesis(c) => Span::raw(c.to_string()),
+        Token::Word(word) => Span::raw(word.to_string()),
+        Token::Whitespace(ws) => Span::raw(ws.to_string()),
+        Token::Symbol(c) => Span::raw(c.to_string()),
+        Token::Text(t) => Span::styled(format!("{}", t), Style::default().fg(Color::Green)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use ratatui::style::{Color, Style};
+    use ratatui::text::Span;
+
+    #[test]
+    fn test_style_input_task() {
+        let input = "Complete the report #work @office";
+        let spans = style_input_task(input);
+
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("Complete"),
+                Span::raw(" "),
+                Span::raw("the"),
+                Span::raw(" "),
+                Span::raw("report"),
+                Span::raw(" "),
+                Span::styled("#work", Style::default().fg(Color::Magenta)),
+                Span::raw(" "),
+                Span::styled("@office", Style::default().fg(Color::Cyan)),
+            ]
+        );
     }
 
-    spans
+    #[test]
+    fn test_style_input_task_with_empty_tag() {
+        let input = "Finish the task # @home";
+        let spans = style_input_task(input);
+
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("Finish"),
+                Span::raw(" "),
+                Span::raw("the"),
+                Span::raw(" "),
+                Span::raw("task"),
+                Span::raw(" "),
+                Span::styled("#", Style::default().fg(Color::Magenta)),
+                Span::raw(" "),
+                Span::styled("@home", Style::default().fg(Color::Cyan)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_style_input_filter() {
+        let input = "(not [x] and #work) or @office";
+        let spans = style_input_filter(input);
+
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("("),
+                Span::styled("not", Style::default().fg(Color::Red)),
+                Span::raw(" "),
+                Span::styled("[x]", Style::default().fg(Color::Green)),
+                Span::raw(" "),
+                Span::styled("and", Style::default().fg(Color::Blue)),
+                Span::raw(" "),
+                Span::styled("#work", Style::default().fg(Color::Magenta)),
+                Span::raw(")"),
+                Span::raw(" "),
+                Span::styled("or", Style::default().fg(Color::Blue)),
+                Span::raw(" "),
+                Span::styled("@office", Style::default().fg(Color::Cyan)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_style_input_filter_with_quotes() {
+        let input = "(not \"meeting notes\" and [ ] or @home)";
+        let spans = style_input_filter(input);
+
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("("),
+                Span::styled("not", Style::default().fg(Color::Red)),
+                Span::raw(" "),
+                Span::styled("\"meeting notes\"", Style::default().fg(Color::Green)),
+                Span::raw(" "),
+                Span::styled("and", Style::default().fg(Color::Blue)),
+                Span::raw(" "),
+                Span::styled("[ ]", Style::default().fg(Color::Yellow)),
+                Span::raw(" "),
+                Span::styled("or", Style::default().fg(Color::Blue)),
+                Span::raw(" "),
+                Span::styled("@home", Style::default().fg(Color::Cyan)),
+                Span::raw(")"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_style_input_filter_with_empty_tag() {
+        let input = "# and @";
+        let spans = style_input_filter(input);
+
+        assert_eq!(
+            spans,
+            vec![
+                Span::styled("#", Style::default().fg(Color::Magenta)),
+                Span::raw(" "),
+                Span::styled("and", Style::default().fg(Color::Blue)),
+                Span::raw(" "),
+                Span::styled("@", Style::default().fg(Color::Cyan)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_style_input_task_with_symbols() {
+        let input = "Fix issue #123!";
+        let spans = style_input_task(input);
+
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("Fix"),
+                Span::raw(" "),
+                Span::raw("issue"),
+                Span::raw(" "),
+                Span::styled("#123", Style::default().fg(Color::Magenta)),
+                Span::raw("!"),
+            ]
+        );
+    }
 }

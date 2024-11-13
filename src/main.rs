@@ -1,4 +1,5 @@
 mod model;
+mod parse;
 mod tui;
 mod update;
 mod utils;

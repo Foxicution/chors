@@ -1,4 +1,10 @@
-use crate::model::task::Task;
+use crate::{
+    model::task::Task,
+    parse::{
+        parse_and_operator, parse_completed, parse_context, parse_incomplete, parse_not_operator,
+        parse_or_operator, parse_parenthesis, parse_quoted_text, parse_tag, Token,
+    },
+};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, tag_no_case},
@@ -228,7 +234,7 @@ fn expression(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
             pair(
                 term,
                 many0(pair(
-                    preceded(multispace0, tag_no_case("or")),
+                    preceded(multispace0, parse_or_operator),
                     preceded(multispace0, term),
                 )),
             ),
@@ -248,7 +254,7 @@ fn term(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
             pair(
                 factor,
                 many0(pair(
-                    preceded(multispace0, tag_no_case("and")),
+                    preceded(multispace0, parse_and_operator),
                     preceded(multispace0, factor),
                 )),
             ),
@@ -266,7 +272,7 @@ fn factor(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
         "factor",
         alt((
             map(
-                preceded(pair(tag_no_case("not"), multispace0), factor),
+                preceded(pair(parse_not_operator, multispace0), factor),
                 |cond| Condition::Not(cond.into()),
             ),
             operand,
@@ -278,9 +284,20 @@ fn operand(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
     context(
         "operand",
         alt((
-            map(delimited(char('('), expression, char(')')), |cond| cond),
-            completed,
-            incomplete,
+            map(
+                delimited(
+                    map(parse_parenthesis, |_| ()),
+                    expression,
+                    map(parse_parenthesis, |_| ()),
+                ),
+                |cond| cond,
+            ),
+            map(parse_completed, |_| {
+                Condition::Completion(Completion::new(true))
+            }),
+            map(parse_incomplete, |_| {
+                Condition::Completion(Completion::new(false))
+            }),
             tag_condition,
             context_condition,
             text_condition,
@@ -288,27 +305,15 @@ fn operand(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
     )(input)
 }
 
-fn completed(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
-    context(
-        "completed condition",
-        map(tag("[x]"), |_| Condition::Completion(Completion::new(true))),
-    )(input)
-}
-
-fn incomplete(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
-    context(
-        "incomplete condition",
-        map(tag("[ ]"), |_| {
-            Condition::Completion(Completion::new(false))
-        }),
-    )(input)
-}
-
 fn tag_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
     context(
         "tag condition",
-        map(preceded(char('#'), identifier), |tag_name: &str| {
-            Condition::Tag(Tag::new(tag_name))
+        map(parse_tag, |token| {
+            if let Token::Tag(tag_name) = token {
+                Condition::Tag(Tag::new(tag_name))
+            } else {
+                unreachable!()
+            }
         }),
     )(input)
 }
@@ -316,8 +321,12 @@ fn tag_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
 fn context_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
     context(
         "context condition",
-        map(preceded(char('@'), identifier), |context_name: &str| {
-            Condition::Context(Context::new(context_name))
+        map(parse_context, |token| {
+            if let Token::Context(context_name) = token {
+                Condition::Context(Context::new(context_name))
+            } else {
+                unreachable!()
+            }
         }),
     )(input)
 }
@@ -325,10 +334,13 @@ fn context_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>
 fn text_condition(input: &str) -> IResult<&str, Condition, VerboseError<&str>> {
     context(
         "text condition",
-        map(
-            delimited(char('"'), is_not("\""), char('"')),
-            |text: &str| Condition::Text(Text::new(text)),
-        ),
+        map(parse_quoted_text, |token| {
+            if let Token::QuotedText(text) = token {
+                Condition::Text(Text::new(text.trim_matches('"')))
+            } else {
+                unreachable!()
+            }
+        }),
     )(input)
 }
 
