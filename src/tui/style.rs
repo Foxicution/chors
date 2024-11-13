@@ -48,11 +48,59 @@ pub fn style_task(task: &Task, ident: usize) -> Vec<Span> {
     description_spans
 }
 
-fn style_task_input(input: &str) -> Vec<Span> {
-    vec![]
+pub fn style_input_task(input: &str) -> Vec<Span> {
+    let mut spans = Vec::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '#' => {
+                // Style words starting with #
+                let mut tag = String::new();
+                tag.push(c);
+                while let Some(&next_c) = chars.peek() {
+                    if next_c.is_whitespace() {
+                        break;
+                    }
+                    tag.push(chars.next().unwrap());
+                }
+                spans.push(Span::styled(tag, Style::default().fg(Color::Magenta)));
+            }
+            '@' => {
+                // Style words starting with @
+                let mut context = String::new();
+                context.push(c);
+                while let Some(&next_c) = chars.peek() {
+                    if next_c.is_whitespace() {
+                        break;
+                    }
+                    context.push(chars.next().unwrap());
+                }
+                spans.push(Span::styled(context, Style::default().fg(Color::Cyan)));
+            }
+            _ => {
+                // Add other text as raw, without styling
+                let mut word = c.to_string();
+                while let Some(&next_c) = chars.peek() {
+                    if next_c.is_whitespace() || "#@".contains(next_c) {
+                        break;
+                    }
+                    word.push(chars.next().unwrap());
+                }
+                spans.push(Span::raw(word));
+            }
+        }
+
+        // Preserve whitespace as raw spans
+        if c.is_whitespace() {
+            spans.push(Span::raw(c.to_string()));
+        }
+    }
+
+    spans
 }
 
-pub fn style_filter_input(input: &str) -> Vec<Span> {
+pub fn style_input_filter(input: &str) -> Vec<Span> {
     let mut spans = Vec::new();
     let mut chars = input.chars().peekable();
 
@@ -133,7 +181,7 @@ pub fn style_filter_input(input: &str) -> Vec<Span> {
                     // Words and keywords
                     let mut word = c.to_string();
                     while let Some(&next_c) = chars.peek() {
-                        if next_c.is_whitespace() || "(){}[]\"#@".contains(next_c) {
+                        if next_c.is_whitespace() || "()[]\"#@".contains(next_c) {
                             break;
                         }
                         word.push(chars.next().unwrap());

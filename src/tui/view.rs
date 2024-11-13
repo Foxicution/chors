@@ -1,6 +1,6 @@
 use crate::{
     model::{DisplayMessage, Mode, Model, Overlay},
-    tui::style::{style_filter_input, style_task},
+    tui::style::{style_input_task, style_task},
     utils::VectorUtils,
 };
 use crossterm::{
@@ -11,7 +11,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Rect},
     style::{Color, Style},
-    text::{Line, Span},
+    text::Line,
     widgets::{List, ListItem, ListState, Paragraph},
     Frame, Terminal,
 };
@@ -90,11 +90,8 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
     let info_paragraph =
         Paragraph::new(" Test!").style(Style::default().bg(Color::DarkGray).fg(Color::White));
 
-    let input_paragraph = if model.overlay != Overlay::None {
-        frame.set_cursor(model.cursor as u16, input_area.y);
-        Paragraph::new(Line::from(style_filter_input(&model.input)))
-    } else {
-        match model.message.clone() {
+    let input_paragraph = match model.overlay {
+        Overlay::None => match model.message.clone() {
             DisplayMessage::None => Paragraph::new(""),
             DisplayMessage::Success(msg) => {
                 Paragraph::new(msg).style(Style::default().fg(Color::Green))
@@ -102,6 +99,10 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
             DisplayMessage::Error(msg) => {
                 Paragraph::new(msg).style(Style::default().fg(Color::Red))
             }
+        },
+        Overlay::AddingSiblingTask | Overlay::AddingChildTask => {
+            frame.set_cursor(model.cursor as u16, input_area.y);
+            Paragraph::new(Line::from(style_input_task(&model.input)))
         }
     };
 
