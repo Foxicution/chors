@@ -129,7 +129,7 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
 
     let input_paragraph = if model.overlay != Overlay::None {
         frame.set_cursor(model.cursor as u16, input_area.y);
-        Paragraph::new(Span::from(model.input.clone()))
+        Paragraph::new(Line::from(style_input(&model.input)))
     } else {
         match model.message.clone() {
             DisplayMessage::None => Paragraph::new(""),
@@ -144,6 +144,108 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
 
     frame.render_widget(info_paragraph, info_area);
     frame.render_widget(input_paragraph, input_area);
+}
+
+fn style_input(input: &str) -> Vec<Span> {
+    let mut spans = Vec::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            // Brackets keep the default style
+            '(' | ')' => {
+                spans.push(Span::raw(c.to_string()));
+            }
+            '"' => {
+                // Strings denoted by ""
+                let mut string_content = String::new();
+                string_content.push(c);
+                while let Some(&next_c) = chars.peek() {
+                    string_content.push(chars.next().unwrap());
+                    if next_c == '"' {
+                        break;
+                    }
+                }
+                spans.push(Span::styled(
+                    string_content,
+                    Style::default().fg(Color::Green),
+                ));
+            }
+            '#' => {
+                // Words starting with #
+                let mut word = String::new();
+                word.push(c);
+                while let Some(&next_c) = chars.peek() {
+                    if next_c.is_whitespace() {
+                        break;
+                    }
+                    word.push(chars.next().unwrap());
+                }
+                spans.push(Span::styled(word, Style::default().fg(Color::Magenta)));
+            }
+            '@' => {
+                // Words starting with @
+                let mut word = String::new();
+                word.push(c);
+                while let Some(&next_c) = chars.peek() {
+                    if next_c.is_whitespace() {
+                        break;
+                    }
+                    word.push(chars.next().unwrap());
+                }
+                spans.push(Span::styled(word, Style::default().fg(Color::Cyan)));
+            }
+            '[' => {
+                // Constructs [ ] and [x]
+                let mut construct = String::new();
+                construct.push(c);
+                if let Some(&next_c) = chars.peek() {
+                    if next_c == 'x' || next_c == ' ' {
+                        construct.push(chars.next().unwrap());
+                        if let Some(&']') = chars.peek() {
+                            construct.push(chars.next().unwrap());
+                            let style = match construct.as_str() {
+                                "[ ]" => Style::default().fg(Color::Green),
+                                "[x]" => Style::default().fg(Color::Yellow),
+                                _ => Style::default(),
+                            };
+                            spans.push(Span::styled(construct, style));
+                        } else {
+                            spans.push(Span::raw(construct));
+                        }
+                    } else {
+                        spans.push(Span::raw(construct));
+                    }
+                } else {
+                    spans.push(Span::raw(construct));
+                }
+            }
+            _ => {
+                if c.is_whitespace() {
+                    spans.push(Span::raw(c.to_string()));
+                } else {
+                    // Words and keywords
+                    let mut word = c.to_string();
+                    while let Some(&next_c) = chars.peek() {
+                        if next_c.is_whitespace() || "(){}[]\"#@".contains(next_c) {
+                            break;
+                        }
+                        word.push(chars.next().unwrap());
+                    }
+                    match word.as_str() {
+                        "and" | "or" | "not" => {
+                            spans.push(Span::styled(word, Style::default().fg(Color::Blue)));
+                        }
+                        _ => {
+                            spans.push(Span::raw(word));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    spans
 }
 
 pub fn init() -> io::Result<Tui> {
