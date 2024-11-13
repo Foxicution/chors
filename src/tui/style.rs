@@ -111,8 +111,8 @@ pub fn style_filter_input(input: &str) -> Vec<Span> {
                         if let Some(&']') = chars.peek() {
                             construct.push(chars.next().unwrap());
                             let style = match construct.as_str() {
-                                "[ ]" => Style::default().fg(Color::Green),
-                                "[x]" => Style::default().fg(Color::Yellow),
+                                "[x]" => Style::default().fg(Color::Green),
+                                "[ ]" => Style::default().fg(Color::Yellow),
                                 _ => Style::default(),
                             };
                             spans.push(Span::styled(construct, style));
