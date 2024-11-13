@@ -25,9 +25,13 @@ const STATUS_HEIGHT: u16 = INFO_HEIGHT + INPUT_HEIGHT;
 pub fn ui(frame: &mut Frame, model: &Model) {
     let size = frame.size();
     let available_height = size.height.saturating_sub(STATUS_HEIGHT);
+    let available_size = Rect {
+        height: available_height,
+        ..size
+    };
 
     match model.mode {
-        Mode::List => render_list_mode(frame, model, size),
+        Mode::List => render_list_mode(frame, model, available_size),
         Mode::Quit => {}
     }
 
