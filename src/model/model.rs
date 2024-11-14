@@ -475,6 +475,10 @@ impl Model {
             ..self.clone()
         }
     }
+
+    pub fn get_selected_filter(&self) -> Option<&Filter> {
+        self.filters.get(&self.selected_filter_id?)
+    }
 }
 
 fn modify_task_at_path(
