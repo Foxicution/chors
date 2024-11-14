@@ -72,6 +72,7 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
                 KeyCode::Char('a') => Message::SetOverlay(Overlay::AddingSiblingTask),
                 KeyCode::Char('A') => Message::SetOverlay(Overlay::AddingChildTask),
                 KeyCode::Char('c') => Message::FlipCompleted(model.get_path()?.to_vec()),
+                KeyCode::Char('d') => Message::RemoveTask(model.get_path()?.to_vec()),
                 KeyCode::Char('u') => Message::Undo,
                 KeyCode::Char('U') => Message::Redo,
                 _ => return None,
