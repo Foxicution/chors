@@ -1,6 +1,7 @@
 use crate::{
     model::{Mode, Model, Overlay, Task},
     tui::{
+        cli::build_cli,
         errors::install_hooks,
         view::{init, restore, ui},
     },
@@ -10,20 +11,34 @@ use crate::{
 use color_eyre::{eyre::Ok, Result};
 use crossterm::event::{poll, read, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{backend::Backend, Terminal};
-use std::time::Duration;
+use std::{fs, path::Path, time::Duration};
 
 pub fn run() -> Result<()> {
     install_hooks()?;
+
+    let matches = build_cli().get_matches();
+    let file_path = matches.get_one::<String>("file");
+
     let mut terminal = init()?;
+    let model = if let Some(file_path) = file_path {
+        if Path::new(file_path).exists() {
+            let data = fs::read_to_string(file_path)?;
+            serde_json::from_str(&data)?
+        } else {
+            Model::new()
+        }
+    } else {
+        Model::new()
+    };
 
-    let model = Model::new()
-        .with_sibling_task(Task::new("this is a taest task"))
-        .unwrap()
-        .with_sibling_task(Task::new("This is another test task"))
-        .unwrap();
-    let _result = run_app(&mut terminal, model);
-
+    let model = run_app(&mut terminal, model)?;
     restore()?;
+
+    if let Some(file_path) = file_path {
+        let data = serde_json::to_string_pretty(&model)?;
+        fs::write(file_path, data)?;
+    };
+
     Ok(())
 }
 
@@ -38,11 +53,11 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut model: Model) -> Result<M
         }
 
         if let Some(msg) = handle_key_event(&model)? {
-            model = update(&msg, &model, &mut history);
-
-            if let Mode::Quit = model.mode {
+            if let Message::Quit = msg {
                 return Ok(model);
             }
+
+            model = update(&msg, &model, &mut history);
         }
     }
 }
@@ -51,7 +66,7 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
     let message = match model.overlay {
         Overlay::None => match model.mode {
             Mode::List => match key {
-                KeyCode::Char('q') => Message::SetMode(Mode::Quit),
+                KeyCode::Char('q') => Message::Quit,
                 KeyCode::Char('j') => Message::Navigate(Direction::Down),
                 KeyCode::Char('k') => Message::Navigate(Direction::Up),
                 KeyCode::Char('a') => Message::SetOverlay(Overlay::AddingSiblingTask),
@@ -61,7 +76,6 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
                 KeyCode::Char('U') => Message::Redo,
                 _ => return None,
             },
-            Mode::Quit => return None,
         },
         Overlay::AddingSiblingTask | Overlay::AddingChildTask => match key {
             KeyCode::Enter => {

@@ -33,6 +33,8 @@ pub enum Message {
     // History
     Undo,
     Redo,
+
+    Quit,
 }
 
 #[derive(Debug, Clone, PartialEq)]

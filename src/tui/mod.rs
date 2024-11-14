@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod errors;
 pub mod run;
 pub mod style;

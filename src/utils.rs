@@ -1,4 +1,5 @@
 use rpds::{HashTrieMap, Vector};
+use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
 #[macro_export]
@@ -24,7 +25,7 @@ impl<T: Clone> VectorUtils<T> for Vector<T> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersistentIndexMap<K: Eq + Hash, V> {
     // Add `Eq` and `Hash` constraints
     map: HashTrieMap<K, V>, // Persistent map for key-value storage

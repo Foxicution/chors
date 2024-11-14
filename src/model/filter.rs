@@ -15,12 +15,13 @@ use nom::{
     sequence::{delimited, pair, preceded},
     IResult,
 };
+use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use uuid::Uuid;
 
 // Condition structs and implementations
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tag {
     tag: Rc<String>,
 }
@@ -43,7 +44,7 @@ impl PartialEq for Tag {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Context {
     context: Rc<String>,
 }
@@ -66,7 +67,7 @@ impl PartialEq for Context {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Completion {
     completed: bool,
 }
@@ -87,7 +88,7 @@ impl PartialEq for Completion {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Text {
     text: Rc<String>,
 }
@@ -112,7 +113,7 @@ impl PartialEq for Text {
 
 // Condition enum
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Condition {
     Tag(Tag),
     Context(Context),
@@ -161,7 +162,7 @@ impl PartialEq for Condition {
 
 // Filter structs
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FilterCondition {
     pub expression: String,
     pub condition: Condition,
@@ -185,7 +186,7 @@ impl PartialEq for FilterCondition {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Filter {
     pub id: Uuid,
     pub name: String,

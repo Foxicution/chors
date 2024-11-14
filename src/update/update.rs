@@ -130,6 +130,8 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
                     Err("Nothing to redo!".to_string())
                 }
             }
+
+            Message::Quit => unreachable!(),
         };
 
     match result {

@@ -33,7 +33,6 @@ pub fn ui(frame: &mut Frame, model: &Model) {
 
     match model.mode {
         Mode::List => render_list_mode(frame, model, available_size),
-        Mode::Quit => {}
     }
 
     render_taskbar(frame, model, size);

@@ -8,22 +8,22 @@ use crate::{
 };
 use chrono::Utc;
 use rpds::Vector;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Overlay {
     AddingSiblingTask,
     AddingChildTask,
     None,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Mode {
     List,
-    Quit,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum DisplayMessage {
     Success(String),
     Error(String),
@@ -50,7 +50,7 @@ impl PartialEq for DisplayMessage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Model {
     pub tasks: PersistentIndexMap<Uuid, Task>,
 

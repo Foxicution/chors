@@ -4,10 +4,11 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use rpds::HashTrieSet;
+use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: Rc<Uuid>,
     pub description: Rc<String>,
