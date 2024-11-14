@@ -82,11 +82,16 @@ fn token_to_span(token: Token) -> Span {
         Token::Context(context) => {
             Span::styled(format!("@{}", context), Style::default().fg(Color::Cyan))
         }
+        Token::NotOperator => Span::raw("not"),
+        Token::AndOperator => Span::raw("and"),
+        Token::OrOperator => Span::raw("or"),
+        Token::Completed => Span::raw("[x]"),
+        Token::Incomplete => Span::raw("[ ]"),
+        Token::QuotedText(text) => Span::raw(text),
+        Token::Parenthesis(c) => Span::raw(c.to_string()),
         Token::Word(word) => Span::raw(word.to_string()),
         Token::Whitespace(ws) => Span::raw(ws.to_string()),
         Token::Symbol(c) => Span::raw(c.to_string()),
-        // Handle other tokens if needed
-        _ => Span::raw(""),
     }
 }
 
@@ -116,7 +121,6 @@ fn token_to_filter_span(token: Token) -> Span {
         Token::Word(word) => Span::raw(word.to_string()),
         Token::Whitespace(ws) => Span::raw(ws.to_string()),
         Token::Symbol(c) => Span::raw(c.to_string()),
-        Token::Text(t) => Span::styled(format!("{}", t), Style::default().fg(Color::Green)),
     }
 }
 

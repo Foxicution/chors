@@ -14,7 +14,6 @@ use nom::{
 pub enum Token<'a> {
     Tag(&'a str),
     Context(&'a str),
-    Text(&'a str),
     NotOperator,
     AndOperator,
     OrOperator,
