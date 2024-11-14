@@ -12,7 +12,7 @@ pub enum Message {
     // Filter management
     AddFilter(Filter),
     SelectFilter(Uuid),
-    ApplyFilter(FilterCondition),
+    ApplyFilter(String),
 
     // Navigation
     Navigate(Direction),

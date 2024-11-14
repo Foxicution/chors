@@ -15,6 +15,7 @@ use uuid::Uuid;
 pub enum Overlay {
     AddingSiblingTask,
     AddingChildTask,
+    EditFilterCondition,
     None,
 }
 
@@ -216,10 +217,17 @@ impl Model {
     }
 
     pub fn with_overlay(&self, overlay: Overlay) -> Self {
+        let input = if let Overlay::EditFilterCondition = overlay {
+            self.current_filter.expression.clone()
+        } else {
+            String::new()
+        };
+        let cursor = input.len();
+
         Self {
             overlay,
-            input: String::new(),
-            cursor: 0,
+            input,
+            cursor,
             ..self.clone()
         }
     }

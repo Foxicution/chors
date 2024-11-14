@@ -31,7 +31,7 @@ pub fn run() -> Result<()> {
         Model::new()
     };
 
-    let model = run_app(&mut terminal, model)?;
+    let model = run_app(&mut terminal, model)?.with_no_message();
     restore()?;
 
     if let Some(file_path) = file_path {
@@ -73,37 +73,41 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
                 KeyCode::Char('A') => Message::SetOverlay(Overlay::AddingChildTask),
                 KeyCode::Char('c') => Message::FlipCompleted(model.get_path()?.to_vec()),
                 KeyCode::Char('d') => Message::RemoveTask(model.get_path()?.to_vec()),
+                KeyCode::Char('f') => Message::SetOverlay(Overlay::EditFilterCondition),
                 KeyCode::Char('u') => Message::Undo,
                 KeyCode::Char('U') => Message::Redo,
                 _ => return None,
             },
         },
-        Overlay::AddingSiblingTask | Overlay::AddingChildTask => match key {
-            KeyCode::Enter => {
-                let task = Task::new(model.input.clone());
-                match model.overlay {
-                    Overlay::AddingSiblingTask => Message::AddSiblingTask(task),
-                    Overlay::AddingChildTask => Message::AddChildTask(task),
-                    Overlay::None => return None,
+        Overlay::AddingSiblingTask | Overlay::AddingChildTask | Overlay::EditFilterCondition => {
+            match key {
+                KeyCode::Enter => {
+                    let input = model.input.clone();
+                    match model.overlay {
+                        Overlay::AddingSiblingTask => Message::AddSiblingTask(Task::new(input)),
+                        Overlay::AddingChildTask => Message::AddChildTask(Task::new(input)),
+                        Overlay::EditFilterCondition => Message::ApplyFilter(input),
+                        Overlay::None => unreachable!(),
+                    }
                 }
+                KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
+                KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
+                KeyCode::Backspace => Message::PopChar,
+                KeyCode::Left if modifiers.contains(KeyModifiers::CONTROL) => {
+                    Message::JumpWord(Direction::Up)
+                }
+                KeyCode::Right if modifiers.contains(KeyModifiers::CONTROL) => {
+                    Message::JumpWord(Direction::Down)
+                }
+                KeyCode::Left => Message::Move(Direction::Up),
+                KeyCode::Right => Message::Move(Direction::Down),
+                KeyCode::Home => Message::JumpStart,
+                KeyCode::End => Message::JumpEnd,
+                KeyCode::Char(ch) => Message::AddChar(ch),
+                KeyCode::Esc => Message::SetOverlay(Overlay::None),
+                _ => return None,
             }
-            KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
-            KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
-            KeyCode::Backspace => Message::PopChar,
-            KeyCode::Left if modifiers.contains(KeyModifiers::CONTROL) => {
-                Message::JumpWord(Direction::Up)
-            }
-            KeyCode::Right if modifiers.contains(KeyModifiers::CONTROL) => {
-                Message::JumpWord(Direction::Down)
-            }
-            KeyCode::Left => Message::Move(Direction::Up),
-            KeyCode::Right => Message::Move(Direction::Down),
-            KeyCode::Home => Message::JumpStart,
-            KeyCode::End => Message::JumpEnd,
-            KeyCode::Char(ch) => Message::AddChar(ch),
-            KeyCode::Esc => Message::SetOverlay(Overlay::None),
-            _ => return None,
-        },
+        }
     };
 
     Some(message)

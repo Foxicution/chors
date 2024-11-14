@@ -17,6 +17,8 @@ use ratatui::{
 };
 use std::io;
 
+use super::style::style_input_filter;
+
 type Tui = Terminal<CrosstermBackend<io::Stdout>>;
 
 const INFO_HEIGHT: u16 = 1;
@@ -121,6 +123,10 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
         Overlay::AddingSiblingTask | Overlay::AddingChildTask => {
             frame.set_cursor(model.cursor as u16, input_area.y);
             Paragraph::new(Line::from(style_input_task(&model.input)))
+        }
+        Overlay::EditFilterCondition => {
+            frame.set_cursor(model.cursor as u16, input_area.y);
+            Paragraph::new(Line::from(style_input_filter(&model.input)))
         }
     };
 

@@ -1,5 +1,5 @@
 use crate::{
-    model::{Model, Overlay},
+    model::{FilterCondition, Model, Overlay},
     update::{History, Message},
 };
 
@@ -59,8 +59,9 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
                 .with_filter_select(*filter_id)
                 .map(|m| UpdateResult::new(m).with_message("Selected filter.")),
 
-            Message::ApplyFilter(filter) => Ok(model.with_filter_condition(filter.clone()))
-                .map(|m| UpdateResult::new(m).with_message("Selected filter")),
+            Message::ApplyFilter(expression) => FilterCondition::new(expression)
+                .map(|fc| model.with_overlay(Overlay::None).with_filter_condition(fc))
+                .map(|m| UpdateResult::new(m).with_message("Applied filter")),
 
             // Navigation
             Message::Navigate(direction) => Ok(model.with_selection_moved(direction))
@@ -144,7 +145,7 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
                 None => update_result.model.with_no_message(),
             }
         }
-        Err(error_message) => model.with_error(error_message),
+        Err(error_message) => model.with_overlay(Overlay::None).with_error(error_message),
     }
 }
 
@@ -191,12 +192,9 @@ mod tests {
         let mut history = History::new(100);
         let model = setup_model_with_tasks().unwrap();
 
-        // Create a filter condition that matches "Task2"
-        let filter_condition = FilterCondition::new("\"Task2\"").unwrap();
-
-        // Apply the filter directly
+        // Apply the filter directly that matches Task2
         let model = update(
-            &Message::ApplyFilter(filter_condition.clone()),
+            &Message::ApplyFilter("\"Task2\"".to_string()),
             &model,
             &mut history,
         );
@@ -362,11 +360,10 @@ mod tests {
             .insert(*task4.id, task4.clone());
 
         // Apply a complex filter
-        let filter_expr = "(#work and @home) or (#urgent and not @gym)";
-        let filter = FilterCondition::new(filter_expr).unwrap();
+        let filter_expr = "(#work and @home) or (#urgent and not @gym)".to_string();
 
         // Update filtered_tasks through Message
-        let model = update(&Message::ApplyFilter(filter), &model, &mut history);
+        let model = update(&Message::ApplyFilter(filter_expr), &model, &mut history);
 
         // Expected to match task1 and task4
         assert!(model.filtered_tasks.contains_key(&task1.id));
