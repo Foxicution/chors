@@ -11,7 +11,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Rect},
     style::{Color, Style},
-    text::Line,
+    text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph},
     Frame, Terminal,
 };
@@ -63,20 +63,33 @@ fn render_list_mode(frame: &mut Frame, model: &Model, size: Rect) {
         // Render the paragraph at the calculated position
         frame.render_widget(empty_message, centered_rect);
     } else {
-        let task_list = model.filtered_tasks.iter().map(|(_, path)| {
-            let task = model
-                .get_task(&path.to_vec())
-                .expect("Should find a task from filtered tasks!");
-            let ident = path.len();
-
-            ListItem::new(Line::from(style_task(task, ident)))
-        });
-
-        let list = List::new(task_list).highlight_style(Style::default().bg(Color::Indexed(8)));
         let selected_task_index = match model.selected_task {
             Some(id) => model.filtered_tasks.get_index(&id),
             None => None,
         };
+
+        let task_list = model
+            .filtered_tasks
+            .iter()
+            .enumerate()
+            .map(|(index, (_, path))| {
+                let task = model
+                    .get_task(&path.to_vec())
+                    .expect("Should find a task from filtered tasks!");
+                let ident = path.len();
+                let line_number_style = if Some(index) == selected_task_index {
+                    Style::default()
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+                let line_number = Span::styled(format!("{:>3} ", index + 1), line_number_style);
+                let mut line_spans = vec![line_number];
+
+                line_spans.extend(style_task(task, ident));
+                ListItem::new(Line::from(line_spans))
+            });
+
+        let list = List::new(task_list).highlight_style(Style::default().bg(Color::Indexed(8)));
         let mut selection_state = ListState::default().with_selected(selected_task_index);
 
         frame.render_stateful_widget(list, size, &mut selection_state);
@@ -87,8 +100,14 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
     let info_area = Rect::new(size.x, size.height - STATUS_HEIGHT, size.width, INFO_HEIGHT);
     let input_area = Rect::new(size.x, size.height - INPUT_HEIGHT, size.width, INPUT_HEIGHT);
 
-    let info_paragraph =
-        Paragraph::new(" Test!").style(Style::default().bg(Color::DarkGray).fg(Color::White));
+    let info_paragraph = Paragraph::new(format!(
+        " <{}>",
+        model
+            .get_selected_filter()
+            .map(|f| f.name.as_str())
+            .unwrap_or("")
+    ))
+    .style(Style::default().bg(Color::DarkGray).fg(Color::White));
 
     let input_paragraph = match model.overlay {
         Overlay::None => match model.message.clone() {
