@@ -60,7 +60,7 @@ pub fn style_task(task: &Task, ident: usize) -> Vec<Span> {
         };
 
         description_spans.push(Span::styled(
-            format!("[{}/{}]", completed_subtasks, total_subtasks),
+            format!(" [{}/{}]", completed_subtasks, total_subtasks),
             Style::default().fg(color),
         ));
     }
