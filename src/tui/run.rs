@@ -79,6 +79,10 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
                 KeyCode::Char('c') => Message::FlipCompleted(model.get_path()?.to_vec()),
                 KeyCode::Char('d') => Message::RemoveTask(model.get_path()?.to_vec()),
                 KeyCode::Char('f') => Message::SetOverlay(Overlay::EditFilterCondition),
+                // KeyCode::Char('F') => Message::SetOverlay(Overlay::AddFilter {
+                //     name: "".to_string(),
+                //     condition: "".to_string(),
+                // }),
                 KeyCode::Char('u') => Message::Undo,
                 KeyCode::Char('U') => Message::Redo,
                 _ => return None,
@@ -87,32 +91,36 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
         Overlay::AddingSiblingTask | Overlay::AddingChildTask | Overlay::EditFilterCondition => {
             match key {
                 KeyCode::Enter => {
-                    let input = model.input.clone();
+                    let input = model.input.text.clone();
                     match model.overlay {
                         Overlay::AddingSiblingTask => Message::AddSiblingTask(Task::new(input)),
                         Overlay::AddingChildTask => Message::AddChildTask(Task::new(input)),
                         Overlay::EditFilterCondition => Message::ApplyFilter(input),
-                        Overlay::None => unreachable!(),
+                        _ => unreachable!(),
                     }
                 }
-                KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
-                KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => Message::PopWord,
-                KeyCode::Backspace => Message::PopChar,
+                KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => {
+                    Message::SetInput(model.input.with_popped_word())
+                }
+                KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    Message::SetInput(model.input.with_popped_word())
+                }
+                KeyCode::Backspace => Message::SetInput(model.input.with_popped_char()),
                 KeyCode::Left if modifiers.contains(KeyModifiers::CONTROL) => {
-                    Message::JumpWord(Direction::Up)
+                    Message::SetInput(model.input.with_cursor_jump_word(&Direction::Up))
                 }
                 KeyCode::Right if modifiers.contains(KeyModifiers::CONTROL) => {
-                    Message::JumpWord(Direction::Down)
+                    Message::SetInput(model.input.with_cursor_jump_word(&Direction::Down))
                 }
-                KeyCode::Left => Message::Move(Direction::Up),
-                KeyCode::Right => Message::Move(Direction::Down),
-                KeyCode::Home => Message::JumpStart,
-                KeyCode::End => Message::JumpEnd,
-                KeyCode::Char(ch) => Message::AddChar(ch),
+                KeyCode::Left => Message::SetInput(model.input.with_cursor_move(&Direction::Up)),
+                KeyCode::Right => Message::SetInput(model.input.with_cursor_move(&Direction::Down)),
+                KeyCode::Home => Message::SetInput(model.input.with_cursor(0)),
+                KeyCode::End => Message::SetInput(model.input.with_cursor(model.input.text.len())),
+                KeyCode::Char(ch) => Message::SetInput(model.input.with_inserted_char(ch)),
                 KeyCode::Esc => Message::SetOverlay(Overlay::None),
                 _ => return None,
             }
-        }
+        } // Overlay::AddFilter(form) => unreachable!(),
     };
 
     Some(message)

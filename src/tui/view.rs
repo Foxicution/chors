@@ -121,12 +121,12 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
             }
         },
         Overlay::AddingSiblingTask | Overlay::AddingChildTask => {
-            frame.set_cursor(model.cursor as u16, input_area.y);
-            Paragraph::new(Line::from(style_input_task(&model.input)))
+            frame.set_cursor(model.input.cursor as u16, input_area.y);
+            Paragraph::new(Line::from(style_input_task(&model.input.text)))
         }
         Overlay::EditFilterCondition => {
-            frame.set_cursor(model.cursor as u16, input_area.y);
-            Paragraph::new(Line::from(style_input_filter(&model.input)))
+            frame.set_cursor(model.input.cursor as u16, input_area.y);
+            Paragraph::new(Line::from(style_input_filter(&model.input.text)))
         }
     };
 

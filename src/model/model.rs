@@ -1,6 +1,7 @@
 use crate::{
     model::{
         filter::{Condition, Filter, FilterCondition},
+        form::{Field, Form},
         task::Task,
     },
     update::Direction,
@@ -16,6 +17,7 @@ pub enum Overlay {
     AddingSiblingTask,
     AddingChildTask,
     EditFilterCondition,
+    // AddFilter(Form),
     None,
 }
 
@@ -67,8 +69,7 @@ pub struct Model {
     pub mode: Mode,
     pub overlay: Overlay,
 
-    pub input: String,
-    pub cursor: usize,
+    pub input: Field,
 }
 
 impl Model {
@@ -92,120 +93,7 @@ impl Model {
             mode: Mode::List,
             overlay: Overlay::None,
 
-            input: String::new(),
-            cursor: 0,
-        }
-    }
-
-    pub fn with_cursor_jump_word(&self, direction: &Direction) -> Self {
-        let is_boundary = |c: char| c.is_whitespace() || c == '@' || c == '#';
-
-        let new_cursor = match direction {
-            Direction::Up => {
-                let trimmed_input = &self.input[..self.cursor];
-
-                if let Some(start_of_word) = trimmed_input.rfind(|c| !is_boundary(c)) {
-                    // Check if the cursor is already at the start of the current word
-                    if self.cursor > start_of_word + 1 {
-                        trimmed_input[..start_of_word + 1]
-                            .rfind(is_boundary)
-                            .map_or(0, |i| i + 1)
-                    } else {
-                        // Move to the start of the previous word
-                        trimmed_input[..start_of_word]
-                            .rfind(is_boundary)
-                            .map_or(0, |i| i + 1)
-                    }
-                } else {
-                    0 // No previous word boundary, go to the start
-                }
-            }
-            Direction::Down => {
-                let remaining_input = &self.input[self.cursor..];
-
-                if let Some(end_of_word) = remaining_input.find(|c| !is_boundary(c)) {
-                    // Move right to the end of the current word or to the next word's start
-                    let after_word_boundary = end_of_word
-                        + remaining_input[end_of_word..]
-                            .find(is_boundary)
-                            .unwrap_or(remaining_input.len());
-
-                    self.cursor + after_word_boundary
-                } else {
-                    self.input.len() // No next word boundary, go to the end
-                }
-            }
-        };
-
-        Self {
-            cursor: new_cursor.max(0).min(self.input.len()),
-            ..self.clone()
-        }
-    }
-
-    pub fn with_popped_char(&self) -> Self {
-        if self.cursor == 0 || self.input.is_empty() {
-            return self.clone();
-        }
-        let mut input = self.input.clone();
-        input.remove(self.cursor - 1);
-        Self {
-            input,
-            cursor: self.cursor - 1,
-            ..self.clone()
-        }
-    }
-
-    pub fn with_popped_word(&self) -> Self {
-        if self.cursor == 0 || self.input.is_empty() {
-            return self.clone(); // If at the beginning or empty, no-op
-        }
-        let mut input = self.input[..self.cursor].to_string();
-        let trimmed_input = input.trim_end();
-        let last_space = trimmed_input.rfind(' ').unwrap_or(0);
-        input.truncate(last_space);
-        input.push_str(&self.input[self.cursor..]); // Preserve the text after the cursor
-        Self {
-            input,
-            cursor: last_space,
-            ..self.clone()
-        }
-    }
-
-    pub fn with_inserted_char(&self, ch: char) -> Self {
-        let mut input = self.input.clone();
-        input.insert(self.cursor, ch);
-
-        Self {
-            input,
-            cursor: self.cursor + 1,
-            ..self.clone()
-        }
-    }
-
-    pub fn with_cursor_move(&self, direction: &Direction) -> Self {
-        let cursor = match direction {
-            Direction::Down => (self.cursor + 1).min(self.input.len()),
-            Direction::Up => self.cursor.saturating_sub(1),
-        };
-
-        Self {
-            cursor,
-            ..self.clone()
-        }
-    }
-
-    pub fn with_cursor(&self, position: usize) -> Self {
-        Self {
-            cursor: position.min(self.input.len()),
-            ..self.clone()
-        }
-    }
-
-    pub fn with_input(&self, input: String) -> Self {
-        Self {
-            input,
-            ..self.clone()
+            input: Field::new(),
         }
     }
 
@@ -216,18 +104,25 @@ impl Model {
         }
     }
 
+    pub fn with_input(&self, input: Field) -> Self {
+        Self {
+            input,
+            ..self.clone()
+        }
+    }
+
     pub fn with_overlay(&self, overlay: Overlay) -> Self {
-        let input = if let Overlay::EditFilterCondition = overlay {
+        let text = if let Overlay::EditFilterCondition = overlay {
             self.current_filter.expression.clone()
         } else {
             String::new()
         };
-        let cursor = input.len();
+        let cursor = text.len();
+        let input = Field { text, cursor };
 
         Self {
             overlay,
             input,
-            cursor,
             ..self.clone()
         }
     }
@@ -855,8 +750,7 @@ mod tests {
             message: DisplayMessage::None,
             mode: Mode::List,
             overlay: Overlay::None,
-            input: String::new(),
-            cursor: 0,
+            input: Field::new(),
         }
     }
 

@@ -30,110 +30,89 @@ impl UpdateResult {
 }
 
 pub fn update(message: &Message, model: &Model, history: &mut History) -> Model {
-    let result =
-        match &message {
-            // Task management
-            Message::AddSiblingTask(task) => model
-                .with_overlay(Overlay::None)
-                .with_sibling_task(task.clone())
-                .map(|m| UpdateResult::new(m).with_message("Added sibling task.")),
+    let result = match &message {
+        // Task management
+        Message::AddSiblingTask(task) => model
+            .with_overlay(Overlay::None)
+            .with_sibling_task(task.clone())
+            .map(|m| UpdateResult::new(m).with_message("Added sibling task.")),
 
-            Message::AddChildTask(task) => model
-                .with_overlay(Overlay::None)
-                .with_child_task(task.clone())
-                .map(|m| UpdateResult::new(m).with_message("Added child task.")),
+        Message::AddChildTask(task) => model
+            .with_overlay(Overlay::None)
+            .with_child_task(task.clone())
+            .map(|m| UpdateResult::new(m).with_message("Added child task.")),
 
-            Message::RemoveTask(path) => model
-                .with_removed_task(path)
-                .map(|m| UpdateResult::new(m).with_message("Removed task.")),
+        Message::RemoveTask(path) => model
+            .with_removed_task(path)
+            .map(|m| UpdateResult::new(m).with_message("Removed task.")),
 
-            Message::FlipCompleted(path) => model
-                .with_flipped_completion(path)
-                .map(|m| UpdateResult::new(m).with_message("Changed completion status for task.")),
+        Message::FlipCompleted(path) => model
+            .with_flipped_completion(path)
+            .map(|m| UpdateResult::new(m).with_message("Changed completion status for task.")),
 
-            // Filter management
-            Message::AddFilter(filter) => Ok(model.with_filter(filter.clone()))
-                .map(|m| UpdateResult::new(m).with_message("Added new filter.")),
+        // Filter management
+        Message::AddFilter(filter) => Ok(model.with_filter(filter.clone()))
+            .map(|m| UpdateResult::new(m).with_message("Added new filter.")),
 
-            Message::SelectFilter(filter_id) => model
-                .with_filter_select(*filter_id)
-                .map(|m| UpdateResult::new(m).with_message("Selected filter.")),
+        Message::SelectFilter(filter_id) => model
+            .with_filter_select(*filter_id)
+            .map(|m| UpdateResult::new(m).with_message("Selected filter.")),
 
-            Message::ApplyFilter(expression) => FilterCondition::new(expression)
-                .map(|fc| model.with_overlay(Overlay::None).with_filter_condition(fc))
-                .map(|m| UpdateResult::new(m).with_message("Applied filter")),
+        Message::ApplyFilter(expression) => FilterCondition::new(expression)
+            .map(|fc| model.with_overlay(Overlay::None).with_filter_condition(fc))
+            .map(|m| UpdateResult::new(m).with_message("Applied filter")),
 
-            // Navigation
-            Message::Navigate(direction) => Ok(model.with_selection_moved(direction))
-                .map(|m| UpdateResult::new(m).without_history()),
+        // Navigation
+        Message::Navigate(direction) => Ok(model.with_selection_moved(direction))
+            .map(|m| UpdateResult::new(m).without_history()),
 
-            // Modes
-            Message::SetMode(mode) => {
-                Ok(model.with_mode(mode.clone())).map(|m| UpdateResult::new(m).without_history())
+        // Modes
+        Message::SetMode(mode) => {
+            Ok(model.with_mode(mode.clone())).map(|m| UpdateResult::new(m).without_history())
+        }
+
+        Message::SetOverlay(overlay) => {
+            Ok(model.with_overlay(overlay.clone())).map(|m| UpdateResult::new(m).without_history())
+        }
+
+        // Input
+        Message::SetInput(input) => {
+            Ok(model.with_input(input.clone())).map(|m| UpdateResult::new(m).without_history())
+        }
+
+        // History
+        Message::Undo => {
+            if let Some(prev_model) = history.undo(model) {
+                let last_action = history.last_action().cloned();
+                let msg = match last_action {
+                    Some(action) => format!("Undid action: {:?}", action),
+                    None => "Undid last action.".to_string(),
+                };
+                Ok(UpdateResult::new(prev_model)
+                    .with_message(msg)
+                    .without_history())
+            } else {
+                Err("Nothing to undo!".to_string())
             }
+        }
 
-            Message::SetOverlay(overlay) => Ok(model.with_overlay(overlay.clone()))
-                .map(|m| UpdateResult::new(m).without_history()),
-
-            // Input
-            Message::AddChar(ch) => {
-                Ok(model.with_inserted_char(*ch)).map(|m| UpdateResult::new(m).without_history())
+        Message::Redo => {
+            if let Some(next_model) = history.redo(model) {
+                let last_action = history.last_action().cloned();
+                let msg = match last_action {
+                    Some(action) => format!("Redid action: {:?}", action),
+                    None => "Redid last action.".to_string(),
+                };
+                Ok(UpdateResult::new(next_model)
+                    .with_message(msg)
+                    .without_history())
+            } else {
+                Err("Nothing to redo!".to_string())
             }
+        }
 
-            Message::PopChar => {
-                Ok(model.with_popped_char()).map(|m| UpdateResult::new(m).without_history())
-            }
-
-            Message::PopWord => {
-                Ok(model.with_popped_word()).map(|m| UpdateResult::new(m).without_history())
-            }
-
-            Message::JumpWord(direction) => Ok(model.with_cursor_jump_word(direction))
-                .map(|m| UpdateResult::new(m).without_history()),
-
-            Message::Move(direction) => Ok(model.with_cursor_move(direction))
-                .map(|m| UpdateResult::new(m).without_history()),
-
-            Message::JumpStart => {
-                Ok(model.with_cursor(0)).map(|m| UpdateResult::new(m).without_history())
-            }
-
-            Message::JumpEnd => Ok(model.with_cursor(model.input.len()))
-                .map(|m| UpdateResult::new(m).without_history()),
-
-            // History
-            Message::Undo => {
-                if let Some(prev_model) = history.undo(model) {
-                    let last_action = history.last_action().cloned();
-                    let msg = match last_action {
-                        Some(action) => format!("Undid action: {:?}", action),
-                        None => "Undid last action.".to_string(),
-                    };
-                    Ok(UpdateResult::new(prev_model)
-                        .with_message(msg)
-                        .without_history())
-                } else {
-                    Err("Nothing to undo!".to_string())
-                }
-            }
-
-            Message::Redo => {
-                if let Some(next_model) = history.redo(model) {
-                    let last_action = history.last_action().cloned();
-                    let msg = match last_action {
-                        Some(action) => format!("Redid action: {:?}", action),
-                        None => "Redid last action.".to_string(),
-                    };
-                    Ok(UpdateResult::new(next_model)
-                        .with_message(msg)
-                        .without_history())
-                } else {
-                    Err("Nothing to redo!".to_string())
-                }
-            }
-
-            Message::Quit => unreachable!(),
-        };
+        Message::Quit => unreachable!(),
+    };
 
     match result {
         Ok(update_result) => {

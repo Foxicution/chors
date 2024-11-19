@@ -1,4 +1,4 @@
-use crate::model::{Filter, FilterCondition, Mode, Overlay, Task};
+use crate::model::{Field, Filter, FilterCondition, Mode, Overlay, Task};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,13 +22,14 @@ pub enum Message {
     SetOverlay(Overlay),
 
     // Input
-    AddChar(char),
-    PopChar,
-    PopWord,
-    JumpWord(Direction),
-    Move(Direction),
-    JumpStart,
-    JumpEnd,
+    SetInput(Field),
+    // AddChar(char),
+    // PopChar,
+    // PopWord,
+    // JumpWord(Direction),
+    // Move(Direction),
+    // JumpStart,
+    // JumpEnd,
 
     // History
     Undo,
