@@ -8,27 +8,32 @@ use crate::{
     update::{update, Direction, History, Message},
     utils::VectorUtils,
 };
-use color_eyre::{eyre::Ok, Result};
+use color_eyre::Result;
 use crossterm::event::{poll, read, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{backend::Backend, Terminal};
-use std::{fs, path::Path, time::Duration};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 pub fn run() -> Result<()> {
     install_hooks()?;
+    let mut terminal = init()?;
 
     let matches = build_cli().get_matches();
-    let file_path = matches.get_one::<String>("file");
+    let file_path = matches.get_one::<String>("file").map(expand_tilde);
 
-    let mut terminal = init()?;
-    let model = if let Some(file_path) = file_path {
-        if Path::new(file_path).exists() {
-            let data = fs::read_to_string(file_path)?;
-            serde_json::from_str(&data)?
-        } else {
-            Model::new()
+    let model = match file_path.as_ref() {
+        Some(path) => {
+            if path.exists() {
+                let data = fs::read_to_string(&path)?;
+                serde_json::from_str(&data)?
+            } else {
+                Model::new()
+            }
         }
-    } else {
-        Model::new()
+        None => Model::new(),
     };
 
     let model = run_app(&mut terminal, model)?.with_no_message();
@@ -124,4 +129,18 @@ fn handle_key_event(model: &Model) -> Result<Option<Message>> {
         }
     }
     Ok(None)
+}
+
+/// Expands `~` to the user's home directory using `std::env`.
+fn expand_tilde<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path = path.as_ref();
+    if let Some(stripped) = path.strip_prefix("~").ok() {
+        if let Ok(home) = env::var("HOME") {
+            return Path::new(&home).join(stripped);
+        } else if let Ok(user_profile) = env::var("USERPROFILE") {
+            // On Windows, use `USERPROFILE` as the fallback for the home directory
+            return Path::new(&user_profile).join(stripped);
+        }
+    };
+    path.to_path_buf()
 }
