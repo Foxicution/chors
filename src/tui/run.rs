@@ -17,6 +17,8 @@ use std::{
     time::Duration,
 };
 
+const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(50);
+
 pub fn run() -> Result<()> {
     install_hooks()?;
     let mut terminal = init()?;
@@ -27,7 +29,7 @@ pub fn run() -> Result<()> {
     let model = match file_path.as_ref() {
         Some(path) => {
             if path.exists() {
-                let data = fs::read_to_string(&path)?;
+                let data = fs::read_to_string(path)?;
                 serde_json::from_str(&data)?
             } else {
                 Model::new()
@@ -49,20 +51,34 @@ pub fn run() -> Result<()> {
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut model: Model) -> Result<Model> {
     let mut history = History::new(100);
+    let mut redraw = true;
 
     loop {
-        terminal.draw(|f| ui(f, &model))?;
+        if redraw {
+            terminal.draw(|f| ui(f, &model))?;
+            redraw = false;
+        }
 
         if !poll_for_event()? {
             continue;
         }
 
-        if let Some(msg) = handle_key_event(&model)? {
-            if let Message::Quit = msg {
-                return Ok(model);
-            }
+        let event = read()?;
+        match event {
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                if let Some(msg) = keycode_to_message(&model, key.code, key.modifiers) {
+                    if let Message::Quit = msg {
+                        return Ok(model);
+                    }
 
-            model = update(&msg, &model, &mut history);
+                    model = update(&msg, &model, &mut history);
+                    redraw = true;
+                }
+            }
+            Event::Resize(_, _) => {
+                redraw = true;
+            }
+            _ => {}
         }
     }
 }
@@ -80,10 +96,15 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
                 KeyCode::Char('d') => Message::RemoveTask(model.get_path()?.to_vec()),
                 KeyCode::Char('f') => Message::SetOverlay(Overlay::EditFilterCondition),
                 KeyCode::Char('F') => Message::SetOverlay(Overlay::AddingFilter),
+                KeyCode::Char(' ') => Message::SetOverlay(Overlay::SelectingFilter),
                 KeyCode::Char('u') => Message::Undo,
                 KeyCode::Char('U') => Message::Redo,
                 _ => return None,
             },
+        },
+        Overlay::SelectingFilter => match key {
+            KeyCode::Char(ch) if ch.is_ascii_digit() => return None,
+            _ => return None,
         },
         Overlay::AddingSiblingTask
         | Overlay::AddingChildTask
@@ -128,22 +149,13 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
 }
 
 fn poll_for_event() -> Result<bool> {
-    Ok(poll(Duration::from_millis(16))?)
-}
-
-fn handle_key_event(model: &Model) -> Result<Option<Message>> {
-    if let Event::Key(key) = read()? {
-        if key.kind == KeyEventKind::Press {
-            return Ok(keycode_to_message(model, key.code, key.modifiers));
-        }
-    }
-    Ok(None)
+    Ok(poll(EVENT_POLL_INTERVAL)?)
 }
 
 /// Expands `~` to the user's home directory using `std::env`.
 fn expand_tilde<P: AsRef<Path>>(path: P) -> PathBuf {
     let path = path.as_ref();
-    if let Some(stripped) = path.strip_prefix("~").ok() {
+    if let Ok(stripped) = path.strip_prefix("~") {
         if let Ok(home) = env::var("HOME") {
             return Path::new(&home).join(stripped);
         } else if let Ok(user_profile) = env::var("USERPROFILE") {
