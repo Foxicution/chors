@@ -128,6 +128,10 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
             frame.set_cursor(model.input.cursor as u16, input_area.y);
             Paragraph::new(Line::from(style_input_filter(&model.input.text)))
         }
+        Overlay::AddingFilter => {
+            frame.set_cursor(model.input.cursor as u16, input_area.y);
+            Paragraph::new(Line::from(model.input.text.clone()))
+        }
     };
 
     frame.render_widget(info_paragraph, info_area);

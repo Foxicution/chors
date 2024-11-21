@@ -1,7 +1,7 @@
 use crate::{
     model::{
         filter::{Condition, Filter, FilterCondition},
-        form::{Field, Form},
+        form::Field,
         task::Task,
     },
     update::Direction,
@@ -17,7 +17,7 @@ pub enum Overlay {
     AddingSiblingTask,
     AddingChildTask,
     EditFilterCondition,
-    // AddFilter(Form),
+    AddingFilter,
     None,
 }
 

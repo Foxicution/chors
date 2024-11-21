@@ -51,8 +51,10 @@ pub fn update(message: &Message, model: &Model, history: &mut History) -> Model 
             .map(|m| UpdateResult::new(m).with_message("Changed completion status for task.")),
 
         // Filter management
-        Message::AddFilter(filter) => Ok(model.with_filter(filter.clone()))
-            .map(|m| UpdateResult::new(m).with_message("Added new filter.")),
+        Message::AddFilter(filter) => Ok(model
+            .with_filter(filter.clone())
+            .with_overlay(Overlay::None))
+        .map(|m| UpdateResult::new(m).with_message("Added new filter.")),
 
         Message::SelectFilter(filter_id) => model
             .with_filter_select(*filter_id)
