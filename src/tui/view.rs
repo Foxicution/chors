@@ -11,6 +11,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Rect},
     style::{Color, Style},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph},
     Frame, Terminal,
@@ -35,12 +36,19 @@ pub fn ui(frame: &mut Frame, model: &Model) {
 
     match model.mode {
         Mode::List => render_list_mode(frame, model, available_size),
+        Mode::List => render_mode_list(frame, model, available_size),
     }
 
+    match model.overlay {
+        Overlay::SelectingFilter => render_overlay_selectingfilter(frame, model, available_size),
+        _ => {}
+    }
     render_taskbar(frame, model, size);
 }
 
-fn render_list_mode(frame: &mut Frame, model: &Model, size: Rect) {
+fn render_overlay_selectingfilter(frame: &mut Frame, model: &Model, size: Rect) {}
+
+fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
     if model.filtered_tasks.is_empty() {
         // Step 1: Calculate the dimensions for a centered message
         let message = "Wow so Empty!\nAdd some todos to get started!";
@@ -111,7 +119,7 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
     .style(Style::default().bg(Color::DarkGray).fg(Color::White));
 
     let input_paragraph = match model.overlay {
-        Overlay::None => match model.message.clone() {
+        Overlay::None | Overlay::SelectingFilter => match model.message.clone() {
             DisplayMessage::None => Paragraph::new(""),
             DisplayMessage::Success(msg) => {
                 Paragraph::new(msg).style(Style::default().fg(Color::Green))

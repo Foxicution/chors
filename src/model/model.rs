@@ -18,6 +18,7 @@ pub enum Overlay {
     AddingChildTask,
     EditFilterCondition,
     AddingFilter,
+    SelectingFilter,
     None,
 }
 
