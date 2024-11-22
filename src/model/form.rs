@@ -17,7 +17,7 @@ impl Field {
     }
 
     pub fn with_cursor_jump_word(&self, direction: &Direction) -> Self {
-        let is_boundary = |c: char| c.is_whitespace() || c == '@' || c == '#';
+        let is_boundary = |c: char| c.is_whitespace(); // || c == '@' || c == '#'
 
         let new_cursor = match direction {
             Direction::Up => {
@@ -81,7 +81,7 @@ impl Field {
         }
         let mut text = self.text[..self.cursor].to_string();
         let trimmed_text = text.trim_end();
-        let last_space = trimmed_text.rfind(' ').unwrap_or(0);
+        let last_space = trimmed_text.rfind(' ').map(|idx| idx + 1).unwrap_or(0);
         text.truncate(last_space);
         text.push_str(&self.text[self.cursor..]); // Preserve the text after the cursor
         Self {
