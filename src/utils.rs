@@ -53,6 +53,32 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
         }
     }
 
+    /// Inserts a key-value pair at a specific position in the order.
+    /// If the key already exists, it is moved to the new position.
+    pub fn insert_at(&self, index: usize, key: K, value: V) -> Self {
+        let mut new_order = Vector::new();
+        let mut added = false;
+
+        for (i, existing_key) in self.order.iter().enumerate() {
+            if i == index && !added {
+                new_order = new_order.push_back(key.clone());
+                added = true;
+            }
+            if existing_key != &key {
+                new_order = new_order.push_back(existing_key.clone());
+            }
+        }
+
+        if !added {
+            new_order = new_order.push_back(key.clone());
+        }
+
+        Self {
+            map: self.map.insert(key, value),
+            order: new_order,
+        }
+    }
+
     // Remove a key-value pair and preserve relative order
     pub fn remove(&self, key: &K) -> Self {
         if self.map.contains_key(key) {
