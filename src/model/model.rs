@@ -7,7 +7,7 @@ use crate::{
     update::Direction,
     utils::{PersistentIndexMap, VectorUtils},
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rpds::Vector;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -612,7 +612,16 @@ fn flip_task_and_update_parents(
     if let Some(task) = tasks.get(current_id) {
         if rest_of_path.is_empty() {
             // Base case: Flip the completion status of this task
-            let new_task = task.with_flip_completed();
+            let new_completed = if task.completed.is_some() {
+                None
+            } else {
+                Some(Utc::now())
+            };
+
+            // Recursively set subtasks' completed status to match
+            // let new_task = task.with_flip_completed();
+            let new_task = set_task_completion_status(task, new_completed);
+
             Ok(tasks.insert(*current_id, new_task))
         } else {
             // Recursive case: Recurse into subtasks
@@ -680,6 +689,27 @@ fn insert_task_and_uncomplete_parents(
         } else {
             Err(format!("Task with ID {} not found", current_id))
         }
+    }
+}
+
+fn set_task_completion_status(task: &Task, completed: Option<DateTime<Utc>>) -> Task {
+    let new_subtasks = task.subtasks.iter().map(|(id, subtask)| {
+        let new_subtask = set_task_completion_status(subtask, completed);
+        (*id, new_subtask)
+    });
+
+    let new_subtasks = PersistentIndexMap::from_iter(new_subtasks);
+
+    // keep the original timestamp
+    let new_completed = match (completed, task.completed.as_ref()) {
+        (None, _) => None,
+        (Some(_), Some(original_timestamp)) => Some(*original_timestamp),
+        (Some(new_timestamp), None) => Some(new_timestamp),
+    };
+    Task {
+        completed: new_completed.into(),
+        subtasks: new_subtasks,
+        ..task.clone()
     }
 }
 
