@@ -227,17 +227,28 @@ impl Model {
         match self.get_path() {
             Some(path) if path.len() >= 2 => {
                 let parent_path = path.drop_last().unwrap();
+                let parent_task = self.get_task(&parent_path.to_vec()).unwrap();
+                let index = parent_task
+                    .subtasks
+                    .get_index(path.last().unwrap())
+                    .unwrap()
+                    + 1;
                 let new_tasks = insert_task_and_uncomplete_parents(
                     &self.tasks,
                     &parent_path.to_vec(),
                     task.clone(),
+                    index,
                 )?;
                 Ok(self.with_tasks(new_tasks, Some(*task.id)))
             }
             _ => {
                 // Adding a sibling to a root task or when no task is selected
-                let mut new_tasks = self.tasks.clone();
-                new_tasks = new_tasks.insert(*task.id, task.clone());
+                let new_tasks = self.tasks.clone();
+                let index = match self.selected_task {
+                    Some(id) => self.tasks.get_index(&id).unwrap() + 1,
+                    None => 0,
+                };
+                let new_tasks = new_tasks.insert_at(index, *task.id, task.clone());
 
                 Ok(self.with_tasks(new_tasks, Some(*task.id)))
             }
@@ -247,8 +258,12 @@ impl Model {
     pub fn with_child_task(&self, task: Task) -> Result<Self, String> {
         match self.get_path() {
             Some(path) if !path.is_empty() => {
-                let new_tasks =
-                    insert_task_and_uncomplete_parents(&self.tasks, &path.to_vec(), task.clone())?;
+                let new_tasks = insert_task_and_uncomplete_parents(
+                    &self.tasks,
+                    &path.to_vec(),
+                    task.clone(),
+                    0,
+                )?;
                 Ok(self.with_tasks(new_tasks, Some(*task.id)))
             }
             _ => Err("Can't insert a child task with no parent task selected".to_string()),
@@ -631,10 +646,11 @@ fn insert_task_and_uncomplete_parents(
     tasks: &PersistentIndexMap<Uuid, Task>,
     path: &[Uuid],
     task_to_insert: Task,
+    index: usize,
 ) -> Result<PersistentIndexMap<Uuid, Task>, String> {
     if path.is_empty() {
         // Insert at the root level
-        Ok(tasks.insert(*task_to_insert.id, task_to_insert))
+        Ok(tasks.insert_at(index, *task_to_insert.id, task_to_insert))
     } else {
         let (current_id, rest_of_path) = path.split_first().unwrap();
 
@@ -644,6 +660,7 @@ fn insert_task_and_uncomplete_parents(
                 &current_task.subtasks,
                 rest_of_path,
                 task_to_insert,
+                index,
             )?;
 
             // Uncomplete the current task if it was completed
