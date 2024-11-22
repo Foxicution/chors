@@ -10,8 +10,7 @@ use crossterm::{
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Rect},
-    style::{Color, Style},
-    style::{Color, Modifier, Style, Stylize},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph},
     Frame, Terminal,
@@ -35,7 +34,6 @@ pub fn ui(frame: &mut Frame, model: &Model) {
     };
 
     match model.mode {
-        Mode::List => render_list_mode(frame, model, available_size),
         Mode::List => render_mode_list(frame, model, available_size),
     }
 
@@ -43,6 +41,7 @@ pub fn ui(frame: &mut Frame, model: &Model) {
         Overlay::SelectingFilter => render_overlay_selectingfilter(frame, model, available_size),
         _ => {}
     }
+
     render_taskbar(frame, model, size);
 }
 
@@ -50,34 +49,49 @@ fn render_overlay_selectingfilter(frame: &mut Frame, model: &Model, size: Rect) 
 
 fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
     if model.filtered_tasks.is_empty() {
-        // Step 1: Calculate the dimensions for a centered message
-        let message = "Wow so Empty!\nAdd some todos to get started!";
-        let message_height = 2; // Adjust this to match the number of lines in the message
-        let y_offset = (size.height / 2).saturating_sub(message_height); // Center vertically
-        let x_offset = size.width / 4; // Adjust for a bit of padding on the sides
+        if let Overlay::AddingSiblingTask = model.overlay {
+            let selected_index = Some(0);
+            let (ident, new_task) = new_task_list_item(model);
 
-        // Step 2: Define a centered rectangle for the message
-        let centered_rect = Rect::new(
-            x_offset,
-            y_offset,
-            size.width / 2,     // Make the message take half the screen width
-            message_height * 2, // Approximate height for the message box
-        );
+            let list =
+                List::new(vec![new_task]).highlight_style(Style::default().bg(Color::Indexed(8)));
+            let mut selection_state = ListState::default().with_selected(selected_index);
 
-        // Step 3: Create and style the paragraph for the message
-        let empty_message = Paragraph::new(message)
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Gray));
+            let cursor_x = 4 + 2 * ident + 4 + model.input.cursor as u16;
+            let cursor_y = size.y;
+            frame.set_cursor(cursor_x, cursor_y);
 
-        // Render the paragraph at the calculated position
-        frame.render_widget(empty_message, centered_rect);
+            frame.render_stateful_widget(list, size, &mut selection_state);
+        } else {
+            // Step 1: Calculate the dimensions for a centered message
+            let message = "Wow so Empty!\nAdd some todos to get started!";
+            let message_height = 2; // Adjust this to match the number of lines in the message
+            let y_offset = (size.height / 2).saturating_sub(message_height); // Center vertically
+            let x_offset = size.width / 4; // Adjust for a bit of padding on the sides
+
+            // Step 2: Define a centered rectangle for the message
+            let centered_rect = Rect::new(
+                x_offset,
+                y_offset,
+                size.width / 2,     // Make the message take half the screen width
+                message_height * 2, // Approximate height for the message box
+            );
+
+            // Step 3: Create and style the paragraph for the message
+            let empty_message = Paragraph::new(message)
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(Color::Gray));
+
+            // Render the paragraph at the calculated position
+            frame.render_widget(empty_message, centered_rect);
+        }
     } else {
-        let selected_task_index = match model.selected_task {
+        let mut selected_task_index = match model.selected_task {
             Some(id) => model.filtered_tasks.get_index(&id),
             None => None,
         };
 
-        let task_list = model
+        let mut task_list: Vec<_> = model
             .filtered_tasks
             .iter()
             .enumerate()
@@ -96,7 +110,35 @@ fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
 
                 line_spans.extend(style_task(task, ident));
                 ListItem::new(Line::from(line_spans))
-            });
+            })
+            .collect();
+
+        if let Overlay::AddingSiblingTask | Overlay::AddingChildTask = model.overlay {
+            let selected_task_children = match model.selected_task {
+                Some(id) => {
+                    let path = model.filtered_tasks.get(&id).unwrap();
+                    model.get_task(&path.to_vec()).unwrap().subtasks.len()
+                }
+                None => 0,
+            };
+            let insertion_index = selected_task_index
+                .map(|idx| {
+                    if let Overlay::AddingSiblingTask = model.overlay {
+                        idx + selected_task_children + 1
+                    } else {
+                        idx + 1
+                    }
+                })
+                .unwrap_or(0);
+            selected_task_index = Some(insertion_index);
+
+            let (ident, new_task) = new_task_list_item(model);
+            task_list.insert(insertion_index, new_task);
+
+            let cursor_x = 4 + 2 * ident + 4 + model.input.cursor as u16;
+            let cursor_y = size.y + insertion_index as u16;
+            frame.set_cursor(cursor_x, cursor_y);
+        }
 
         let list = List::new(task_list).highlight_style(Style::default().bg(Color::Indexed(8)));
         let mut selection_state = ListState::default().with_selected(selected_task_index);
@@ -119,7 +161,10 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
     .style(Style::default().bg(Color::DarkGray).fg(Color::White));
 
     let input_paragraph = match model.overlay {
-        Overlay::None | Overlay::SelectingFilter => match model.message.clone() {
+        Overlay::None
+        | Overlay::SelectingFilter
+        | Overlay::AddingSiblingTask
+        | Overlay::AddingChildTask => match model.message.clone() {
             DisplayMessage::None => Paragraph::new(""),
             DisplayMessage::Success(msg) => {
                 Paragraph::new(msg).style(Style::default().fg(Color::Green))
@@ -128,10 +173,11 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
                 Paragraph::new(msg).style(Style::default().fg(Color::Red))
             }
         },
-        Overlay::AddingSiblingTask | Overlay::AddingChildTask => {
-            frame.set_cursor(model.input.cursor as u16, input_area.y);
-            Paragraph::new(Line::from(style_input_task(&model.input.text)))
-        }
+        // Old behavior, moved to the task view, might add back in calendar mode
+        // Overlay::AddingSiblingTask | Overlay::AddingChildTask => {
+        //     frame.set_cursor(model.input.cursor as u16, input_area.y);
+        //     Paragraph::new(Line::from(style_input_task(&model.input.text)))
+        // }
         Overlay::EditFilterCondition => {
             frame.set_cursor(model.input.cursor as u16, input_area.y);
             Paragraph::new(Line::from(style_input_filter(&model.input.text)))
@@ -144,6 +190,42 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
 
     frame.render_widget(info_paragraph, info_area);
     frame.render_widget(input_paragraph, input_area);
+}
+
+fn new_task_list_item(model: &Model) -> (u16, ListItem) {
+    let ident = model
+        .selected_task
+        .map(|id| model.filtered_tasks.get(&id))
+        .map(|path| path.unwrap().len())
+        .map(|len| {
+            if let Overlay::AddingChildTask = model.overlay {
+                len + 1
+            } else {
+                len
+            }
+        })
+        .unwrap_or(0);
+
+    let mut line_spans = vec![
+        Span::raw("    "),
+        Span::raw("  ".repeat(ident)),
+        Span::styled("[ ] ", Style::default().fg(Color::Yellow)),
+    ];
+    let input_spans = style_input_task(&model.input.text).into_iter().map(|span| {
+        if span.style == Style::default() {
+            Span::styled(
+                span.content,
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::ITALIC),
+            )
+        } else {
+            Span::styled(span.content, span.style.add_modifier(Modifier::ITALIC))
+        }
+    });
+    line_spans.extend(input_spans);
+    let line_item = ListItem::new(Line::from(line_spans));
+    (ident as u16, line_item)
 }
 
 pub fn init() -> io::Result<Tui> {
