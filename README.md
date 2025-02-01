@@ -16,8 +16,11 @@ Linux:
 cargo run -- -f "~/.config/chors/model.json"
 ```
 
-# TODO:
+# TODO for v0.1.0:
+- [ ] Add a help (?) command overview and a reference that's auto generated
+- [ ] Make pasting instant
 - [ ] Filter view overlay editing
 - [ ] View saving, editing
+- [ ] Group operations in views
 - [ ] Calendar view working fully (add tasks, edit tasks, view tasks, change times of tasks, navigate the calendar)
 - [ ] Mobile support
