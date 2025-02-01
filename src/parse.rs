@@ -36,7 +36,7 @@ pub fn parse_tag(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         map(
             recognize(pair(
                 char('#'),
-                take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
+                take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-' || c == '/'),
             )),
             |tag_text: &str| Token::Tag(&tag_text[1..]), // Skip the '#' character
         ),
@@ -50,7 +50,7 @@ pub fn parse_context(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
         map(
             recognize(pair(
                 char('@'),
-                take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
+                take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-' || c == '/'),
             )),
             |context_text: &str| Token::Context(&context_text[1..]), // Skip the '@' character
         ),
@@ -101,10 +101,7 @@ pub fn parse_incomplete(input: &str) -> IResult<&str, Token, VerboseError<&str>>
 
 /// Parse a parenthesis.
 pub fn parse_parenthesis(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    context(
-        "parenthesis",
-        map(one_of("()"), |paren| Token::Parenthesis(paren)),
-    )(input)
+    context("parenthesis", map(one_of("()"), Token::Parenthesis))(input)
 }
 
 /// Parse a word (any sequence of non-special characters).
@@ -137,7 +134,7 @@ pub fn parse_whitespace(input: &str) -> IResult<&str, Token, VerboseError<&str>>
 
 /// Parse any symbol (single character not matched by other parsers).
 pub fn parse_symbol(input: &str) -> IResult<&str, Token, VerboseError<&str>> {
-    context("symbol", map(anychar, |c| Token::Symbol(c)))(input)
+    context("symbol", map(anychar, Token::Symbol))(input)
 }
 
 /// Helper function to parse a sequence of tokens.
