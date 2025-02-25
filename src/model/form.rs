@@ -93,7 +93,15 @@ impl Field {
 
     pub fn with_inserted_char(&self, ch: char) -> Self {
         let mut text = self.text.clone();
-        text.insert(self.cursor, ch);
+
+        // Do this to allow multi byte chars (e.g. ČŽ...)
+        let byte_index = self.text[..]
+            .char_indices()
+            .nth(self.cursor)
+            .map(|(idx, _)| idx)
+            .unwrap_or_else(|| self.text.len());
+
+        text.insert(byte_index, ch);
 
         Self {
             text,
