@@ -71,7 +71,6 @@ impl Field {
         Self {
             text,
             cursor: self.cursor - 1,
-            ..self.clone()
         }
     }
 
@@ -87,7 +86,6 @@ impl Field {
         Self {
             text,
             cursor: last_space,
-            ..self.clone()
         }
     }
 
@@ -106,7 +104,6 @@ impl Field {
         Self {
             text,
             cursor: self.cursor + 1,
-            ..self.clone()
         }
     }
 
