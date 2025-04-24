@@ -152,9 +152,9 @@ mod tests {
                 Span::raw(" "),
                 Span::raw("report"),
                 Span::raw(" "),
-                Span::styled("#work", Style::default().fg(Color::Magenta)),
+                Span::styled("#work", Style::default().fg(Color::LightMagenta)),
                 Span::raw(" "),
-                Span::styled("@office", Style::default().fg(Color::Cyan)),
+                Span::styled("@office", Style::default().fg(Color::LightCyan)),
             ]
         );
     }
@@ -173,9 +173,9 @@ mod tests {
                 Span::raw(" "),
                 Span::raw("task"),
                 Span::raw(" "),
-                Span::styled("#", Style::default().fg(Color::Magenta)),
+                Span::raw("#"),
                 Span::raw(" "),
-                Span::styled("@home", Style::default().fg(Color::Cyan)),
+                Span::styled("@home", Style::default().fg(Color::LightCyan)),
             ]
         );
     }
@@ -189,18 +189,18 @@ mod tests {
             spans,
             vec![
                 Span::raw("("),
-                Span::styled("not", Style::default().fg(Color::Red)),
+                Span::styled("not", Style::default().fg(Color::LightRed)),
                 Span::raw(" "),
-                Span::styled("[x]", Style::default().fg(Color::Green)),
+                Span::styled("[x]", Style::default().fg(Color::LightGreen)),
                 Span::raw(" "),
-                Span::styled("and", Style::default().fg(Color::Blue)),
+                Span::styled("and", Style::default().fg(Color::LightBlue)),
                 Span::raw(" "),
-                Span::styled("#work", Style::default().fg(Color::Magenta)),
+                Span::styled("#work", Style::default().fg(Color::LightMagenta)),
                 Span::raw(")"),
                 Span::raw(" "),
-                Span::styled("or", Style::default().fg(Color::Blue)),
+                Span::styled("or", Style::default().fg(Color::LightBlue)),
                 Span::raw(" "),
-                Span::styled("@office", Style::default().fg(Color::Cyan)),
+                Span::styled("@office", Style::default().fg(Color::LightCyan)),
             ]
         );
     }
@@ -214,17 +214,17 @@ mod tests {
             spans,
             vec![
                 Span::raw("("),
-                Span::styled("not", Style::default().fg(Color::Red)),
+                Span::styled("not", Style::default().fg(Color::LightRed)),
                 Span::raw(" "),
-                Span::styled("\"meeting notes\"", Style::default().fg(Color::Green)),
+                Span::styled("\"meeting notes\"", Style::default().fg(Color::LightGreen)),
                 Span::raw(" "),
-                Span::styled("and", Style::default().fg(Color::Blue)),
+                Span::styled("and", Style::default().fg(Color::LightBlue)),
                 Span::raw(" "),
-                Span::styled("[ ]", Style::default().fg(Color::Yellow)),
+                Span::styled("[ ]", Style::default().fg(Color::LightYellow)),
                 Span::raw(" "),
-                Span::styled("or", Style::default().fg(Color::Blue)),
+                Span::styled("or", Style::default().fg(Color::LightBlue)),
                 Span::raw(" "),
-                Span::styled("@home", Style::default().fg(Color::Cyan)),
+                Span::styled("@home", Style::default().fg(Color::LightCyan)),
                 Span::raw(")"),
             ]
         );
@@ -238,11 +238,11 @@ mod tests {
         assert_eq!(
             spans,
             vec![
-                Span::styled("#", Style::default().fg(Color::Magenta)),
+                Span::raw("#"),
                 Span::raw(" "),
-                Span::styled("and", Style::default().fg(Color::Blue)),
+                Span::styled("and", Style::default().fg(Color::LightBlue)),
                 Span::raw(" "),
-                Span::styled("@", Style::default().fg(Color::Cyan)),
+                Span::raw("@"),
             ]
         );
     }
@@ -259,7 +259,7 @@ mod tests {
                 Span::raw(" "),
                 Span::raw("issue"),
                 Span::raw(" "),
-                Span::styled("#123", Style::default().fg(Color::Magenta)),
+                Span::styled("#123", Style::default().fg(Color::LightMagenta)),
                 Span::raw("!"),
             ]
         );
