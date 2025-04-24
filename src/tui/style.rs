@@ -1,20 +1,19 @@
 use crate::{
     model::Task,
     parse::{
-        parse_and_operator, parse_completed, parse_context, parse_incomplete, parse_not_operator,
-        parse_or_operator, parse_parenthesis, parse_quoted_text, parse_symbol, parse_tag,
-        parse_tokens, parse_whitespace, parse_word, Token,
+        Token, parse_and_operator, parse_completed, parse_context, parse_incomplete,
+        parse_not_operator, parse_or_operator, parse_parenthesis, parse_quoted_text, parse_symbol,
+        parse_tag, parse_tokens, parse_whitespace, parse_word,
     },
 };
-use color_eyre::owo_colors::OwoColorize;
 use nom::{
+    IResult,
     branch::alt,
     bytes::complete::{is_not, tag, tag_no_case, take_while1},
     character::complete::{alphanumeric1, anychar, char, multispace1, one_of},
     combinator::{map, opt, recognize},
     multi::many0,
     sequence::{delimited, preceded},
-    IResult,
 };
 use ratatui::{
     style::{Color, Style},
@@ -25,9 +24,9 @@ use ratatui::{
 pub fn style_task(task: &Task, ident: usize) -> Vec<Span> {
     let ident = "  ".repeat(ident); // Adds indentation based on the specified level.
     let status = if task.completed.is_some() {
-        Span::styled("[x]", Style::default().fg(Color::Green))
+        Span::styled("[x]", Style::default().fg(Color::LightGreen))
     } else {
-        Span::styled("[ ]", Style::default().fg(Color::Yellow))
+        Span::styled("[ ]", Style::default().fg(Color::LightYellow))
     };
 
     // Start building the list of spans with indentation and status
@@ -54,9 +53,9 @@ pub fn style_task(task: &Task, ident: usize) -> Vec<Span> {
             .count();
 
         let color = if completed_subtasks == total_subtasks {
-            Color::Green
+            Color::LightGreen
         } else {
-            Color::Yellow
+            Color::LightYellow
         };
 
         description_spans.push(Span::styled(
@@ -78,10 +77,14 @@ pub fn style_input_task(input: &str) -> Vec<Span> {
 
 fn token_to_span(token: Token) -> Span {
     match token {
-        Token::Tag(tag) => Span::styled(format!("#{}", tag), Style::default().fg(Color::Magenta)),
-        Token::Context(context) => {
-            Span::styled(format!("@{}", context), Style::default().fg(Color::Cyan))
-        }
+        Token::Tag(tag) => Span::styled(
+            format!("#{}", tag),
+            Style::default().fg(Color::LightMagenta),
+        ),
+        Token::Context(context) => Span::styled(
+            format!("@{}", context),
+            Style::default().fg(Color::LightCyan),
+        ),
         Token::NotOperator => Span::raw("not"),
         Token::AndOperator => Span::raw("and"),
         Token::OrOperator => Span::raw("or"),
@@ -105,17 +108,21 @@ pub fn style_input_filter(input: &str) -> Vec<Span> {
 
 fn token_to_filter_span(token: Token) -> Span {
     match token {
-        Token::Tag(tag) => Span::styled(format!("#{}", tag), Style::default().fg(Color::Magenta)),
-        Token::Context(context) => {
-            Span::styled(format!("@{}", context), Style::default().fg(Color::Cyan))
-        }
-        Token::NotOperator => Span::styled("not", Style::default().fg(Color::Red)),
-        Token::AndOperator => Span::styled("and", Style::default().fg(Color::Blue)),
-        Token::OrOperator => Span::styled("or", Style::default().fg(Color::Blue)),
-        Token::Completed => Span::styled("[x]", Style::default().fg(Color::Green)),
-        Token::Incomplete => Span::styled("[ ]", Style::default().fg(Color::Yellow)),
+        Token::Tag(tag) => Span::styled(
+            format!("#{}", tag),
+            Style::default().fg(Color::LightMagenta),
+        ),
+        Token::Context(context) => Span::styled(
+            format!("@{}", context),
+            Style::default().fg(Color::LightCyan),
+        ),
+        Token::NotOperator => Span::styled("not", Style::default().fg(Color::LightRed)),
+        Token::AndOperator => Span::styled("and", Style::default().fg(Color::LightBlue)),
+        Token::OrOperator => Span::styled("or", Style::default().fg(Color::LightBlue)),
+        Token::Completed => Span::styled("[x]", Style::default().fg(Color::LightGreen)),
+        Token::Incomplete => Span::styled("[ ]", Style::default().fg(Color::LightYellow)),
         Token::QuotedText(text) => {
-            Span::styled(text.to_string(), Style::default().fg(Color::Green))
+            Span::styled(text.to_string(), Style::default().fg(Color::LightGreen))
         }
         Token::Parenthesis(c) => Span::raw(c.to_string()),
         Token::Word(word) => Span::raw(word.to_string()),

@@ -5,15 +5,15 @@ use crate::{
 };
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Frame, Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{List, ListItem, ListState, Paragraph},
-    Frame, Terminal,
 };
 use std::io;
 
@@ -54,7 +54,7 @@ fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
             let (ident, new_task) = new_task_list_item(model);
 
             let list =
-                List::new(vec![new_task]).highlight_style(Style::default().bg(Color::Indexed(8)));
+                List::new(vec![new_task]).highlight_style(Style::new().bg(Color::Indexed(238)));
             let mut selection_state = ListState::default().with_selected(selected_index);
 
             let cursor_x = 4 + 2 * ident + 4 + model.input.cursor as u16;
@@ -140,7 +140,7 @@ fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
             frame.set_cursor(cursor_x, cursor_y);
         }
 
-        let list = List::new(task_list).highlight_style(Style::default().bg(Color::Indexed(8)));
+        let list = List::new(task_list).highlight_style(Style::default().bg(Color::Indexed(238)));
         let mut selection_state = ListState::default().with_selected(selected_task_index);
 
         frame.render_stateful_widget(list, size, &mut selection_state);
@@ -158,7 +158,7 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
             .map(|f| f.name.as_str())
             .unwrap_or("")
     ))
-    .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+    .bg(Color::Indexed(239));
 
     let input_paragraph = match model.overlay {
         Overlay::None
@@ -166,12 +166,8 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
         | Overlay::AddingSiblingTask
         | Overlay::AddingChildTask => match model.message.clone() {
             DisplayMessage::None => Paragraph::new(""),
-            DisplayMessage::Success(msg) => {
-                Paragraph::new(msg).style(Style::default().fg(Color::Green))
-            }
-            DisplayMessage::Error(msg) => {
-                Paragraph::new(msg).style(Style::default().fg(Color::Red))
-            }
+            DisplayMessage::Success(msg) => Paragraph::new(msg).fg(Color::LightGreen),
+            DisplayMessage::Error(msg) => Paragraph::new(msg).fg(Color::LightRed),
         },
         // Old behavior, moved to the task view, might add back in calendar mode
         // Overlay::AddingSiblingTask | Overlay::AddingChildTask => {
@@ -209,14 +205,14 @@ fn new_task_list_item(model: &Model) -> (u16, ListItem) {
     let mut line_spans = vec![
         Span::raw("    "),
         Span::raw("  ".repeat(ident)),
-        Span::styled("[ ] ", Style::default().fg(Color::Yellow)),
+        Span::styled("[ ] ", Style::default().fg(Color::LightYellow)),
     ];
     let input_spans = style_input_task(&model.input.text).into_iter().map(|span| {
         if span.style == Style::default() {
             Span::styled(
                 span.content,
                 Style::default()
-                    .fg(Color::Green)
+                    .fg(Color::LightGreen)
                     .add_modifier(Modifier::ITALIC),
             )
         } else {
