@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     model::{
         filter::{Condition, Filter, FilterCondition},
@@ -532,61 +534,85 @@ fn flatten_tasks(task_tree: &PersistentIndexMap<Uuid, Task>) -> Vec<Uuid> {
     result
 }
 
+struct Match {
+    self_match: bool,
+    subtree_match: bool,
+}
+
 fn filter_tasks(
     tasks: &PersistentIndexMap<Uuid, Task>,
     condition: &Condition,
 ) -> PersistentIndexMap<Uuid, Vector<Uuid>> {
+    // Mark which tasks should be included based on condition
+    let mut match_map: HashMap<Uuid, Match> = HashMap::new();
+    for (id, task) in tasks.iter() {
+        match_tasks(id, task, condition, &mut match_map);
+    }
+
+    // ...
     let mut results = PersistentIndexMap::new();
     let current_path = Vector::new();
-
     for (task_id, task) in tasks.iter() {
-        filter_tasks_recursive(task_id, task, condition, &current_path, &mut results, false);
+        collect_matches(task_id, task, &current_path, &match_map, &mut results);
     }
 
     results
 }
 
-fn filter_tasks_recursive(
+fn match_tasks(
     task_id: &Uuid,
     task: &Task,
     condition: &Condition,
-    current_path: &Vector<Uuid>,
-    results: &mut PersistentIndexMap<Uuid, Vector<Uuid>>,
-    parent_matches: bool,
+    match_map: &mut HashMap<Uuid, Match>,
 ) -> bool {
-    let current_task_matches = condition.evaluate(task);
-    let matches = parent_matches || current_task_matches;
+    let self_match = condition.evaluate(task);
+    let mut subtree_match = self_match;
+
+    for (child_id, child) in task.subtasks.iter() {
+        if match_tasks(child_id, child, condition, match_map) {
+            subtree_match = true;
+        }
+    }
+
+    match_map.insert(
+        *task_id,
+        Match {
+            self_match,
+            subtree_match,
+        },
+    );
+    subtree_match
+}
+
+fn collect_matches(
+    task_id: &Uuid,
+    task: &Task,
+    current_path: &Vector<Uuid>,
+    match_map: &HashMap<Uuid, Match>,
+    results: &mut PersistentIndexMap<Uuid, Vector<Uuid>>,
+) {
+    let info = match_map.get(task_id).unwrap();
     let new_path = current_path.push_back(*task_id);
 
-    if matches {
-        // Add current task to results
-        *results = results.insert(*task_id, new_path.clone());
-        // Include all descendants
-        for (subtask_id, subtask) in task.subtasks.iter() {
-            filter_tasks_include_all(subtask_id, subtask, &new_path, results);
-        }
-        true
-    } else {
-        // Check if any descendants match
-        let mut any_descendants_match = false;
-        for (subtask_id, subtask) in task.subtasks.iter() {
-            let subtask_matches =
-                filter_tasks_recursive(subtask_id, subtask, condition, &new_path, results, false);
-            if subtask_matches {
-                any_descendants_match = true;
+    match info {
+        Match {
+            self_match: true,
+            subtree_match: _,
+        } => include_all(task_id, task, current_path, results),
+        Match {
+            self_match: false,
+            subtree_match: true,
+        } => {
+            *results = results.insert(*task_id, new_path.clone());
+            for (child_id, child) in task.subtasks.iter() {
+                collect_matches(child_id, child, &new_path, match_map, results);
             }
         }
-        if any_descendants_match {
-            // Include current task since a descendant matches
-            *results = results.insert(*task_id, new_path);
-            true
-        } else {
-            false
-        }
+        _ => {}
     }
 }
 
-fn filter_tasks_include_all(
+fn include_all(
     task_id: &Uuid,
     task: &Task,
     current_path: &Vector<Uuid>,
@@ -595,7 +621,7 @@ fn filter_tasks_include_all(
     let new_path = current_path.push_back(*task_id);
     *results = results.insert(*task_id, new_path.clone());
     for (subtask_id, subtask) in task.subtasks.iter() {
-        filter_tasks_include_all(subtask_id, subtask, &new_path, results);
+        include_all(subtask_id, subtask, &new_path, results);
     }
 }
 
@@ -1290,9 +1316,11 @@ mod tests {
 
         // Verify that only "Task1" is in the filtered tasks
         assert_eq!(model.filtered_tasks.len(), 1);
-        assert!(model
-            .filtered_tasks
-            .contains_key(model.tasks.get_key_at_index(0).unwrap()));
+        assert!(
+            model
+                .filtered_tasks
+                .contains_key(model.tasks.get_key_at_index(0).unwrap())
+        );
     }
 
     #[test]
@@ -1308,12 +1336,14 @@ mod tests {
 
         // Verify selected filter and filtered tasks
         assert_eq!(model.selected_filter_id.unwrap(), filter_id);
-        assert!(model.filtered_tasks.contains_key(
-            model
-                .tasks
-                .get_key_at_index(0)
-                .expect("First task should exist")
-        ));
+        assert!(
+            model.filtered_tasks.contains_key(
+                model
+                    .tasks
+                    .get_key_at_index(0)
+                    .expect("First task should exist")
+            )
+        );
     }
 
     #[test]
