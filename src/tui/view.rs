@@ -116,8 +116,21 @@ fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
         if let Overlay::AddingSiblingTask | Overlay::AddingChildTask = model.overlay {
             let selected_task_children = match model.selected_task {
                 Some(id) => {
-                    let path = model.filtered_tasks.get(&id).unwrap();
-                    model.get_task(&path.to_vec()).unwrap().subtasks.len()
+                    let selected_path = model.filtered_tasks.get(&id).unwrap();
+                    let prefix_len = selected_path.len();
+
+                    model
+                        .filtered_tasks
+                        .iter()
+                        .filter(|(_id, path)| {
+                            path.len() > prefix_len
+                                && path
+                                    .iter()
+                                    .take(prefix_len)
+                                    .zip(selected_path.iter())
+                                    .all(|(a, b)| a == b)
+                        })
+                        .count()
                 }
                 None => 0,
             };
