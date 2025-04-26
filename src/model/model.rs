@@ -21,6 +21,7 @@ pub enum Overlay {
     EditFilterCondition,
     AddingFilter,
     SelectingFilter,
+    Help,
     None,
 }
 

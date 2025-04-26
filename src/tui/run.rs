@@ -5,13 +5,14 @@ use crate::{
         errors::install_hooks,
         view::{init, restore, ui},
     },
-    update::{update, Direction, History, Message},
+    update::{Direction, History, Message, update},
     utils::VectorUtils,
 };
 use color_eyre::Result;
-use crossterm::event::{poll, read, Event, KeyCode, KeyEventKind, KeyModifiers};
-use ratatui::{backend::Backend, Terminal};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers, poll, read};
+use ratatui::{Terminal, backend::Backend};
 use std::{
+    collections::HashMap,
     env, fs,
     path::{Path, PathBuf},
     time::Duration,
@@ -83,24 +84,111 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut model: Model) -> Result<M
     }
 }
 
+pub struct KeyBind {
+    pub keys: &'static [(KeyCode, KeyModifiers)],
+    pub modes: &'static [Mode],
+    pub action: fn(model: &Model) -> Option<Message>,
+    pub description: &'static str,
+}
+
+pub const KEYBINDS: &[KeyBind] = &[
+    KeyBind {
+        keys: &[(KeyCode::Char('q'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::Quit),
+        description: "Quit",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('j'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::Navigate(Direction::Down)),
+        description: "Navigate down",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('k'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::Navigate(Direction::Up)),
+        description: "Navigate up",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('a'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::SetOverlay(Overlay::AddingSiblingTask)),
+        description: "Add a task",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('A'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::SetOverlay(Overlay::AddingChildTask)),
+        description: "Add a subtask",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('c'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |model| Some(Message::FlipCompleted(model.get_path()?.to_vec())),
+        description: "Toggle task completion",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('d'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |model| Some(Message::RemoveTask(model.get_path()?.to_vec())),
+        description: "Remove task",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('f'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::SetOverlay(Overlay::EditFilterCondition)),
+        description: "Edit current filter",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('F'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::SetOverlay(Overlay::AddingFilter)),
+        description: "Save current filter",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char(' '), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::SetOverlay(Overlay::SelectingFilter)),
+        description: "Select a filter",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('u'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::Undo),
+        description: "Undo last action",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('U'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::Redo),
+        description: "Redo last action",
+    },
+    KeyBind {
+        keys: &[(KeyCode::Char('?'), KeyModifiers::NONE)],
+        modes: &[Mode::List],
+        action: |_| Some(Message::SetOverlay(Overlay::Help)),
+        description: "Show help",
+    },
+];
+
 fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> Option<Message> {
     let message = match model.overlay {
-        Overlay::None => match model.mode {
-            Mode::List => match key {
-                KeyCode::Char('q') => Message::Quit,
-                KeyCode::Char('j') => Message::Navigate(Direction::Down),
-                KeyCode::Char('k') => Message::Navigate(Direction::Up),
-                KeyCode::Char('a') => Message::SetOverlay(Overlay::AddingSiblingTask),
-                KeyCode::Char('A') => Message::SetOverlay(Overlay::AddingChildTask),
-                KeyCode::Char('c') => Message::FlipCompleted(model.get_path()?.to_vec()),
-                KeyCode::Char('d') => Message::RemoveTask(model.get_path()?.to_vec()),
-                KeyCode::Char('f') => Message::SetOverlay(Overlay::EditFilterCondition),
-                KeyCode::Char('F') => Message::SetOverlay(Overlay::AddingFilter),
-                KeyCode::Char(' ') => Message::SetOverlay(Overlay::SelectingFilter),
-                KeyCode::Char('u') => Message::Undo,
-                KeyCode::Char('U') => Message::Redo,
-                _ => return None,
-            },
+        Overlay::None => {
+            // Drop the SHIFT bit (add later if needed for something)
+            let mods = modifiers & !KeyModifiers::SHIFT;
+            for kb in KEYBINDS {
+                if kb.modes.contains(&model.mode) && kb.keys.contains(&(key, mods)) {
+                    return (kb.action)(model);
+                }
+            }
+            return None;
+        }
+        Overlay::Help => match key {
+            KeyCode::Esc | KeyCode::Char('?') => {
+                return Some(Message::SetOverlay(Overlay::None));
+            }
+            _ => return None,
         },
         Overlay::SelectingFilter => match key {
             KeyCode::Char(ch) if ch.is_ascii_digit() => return None,

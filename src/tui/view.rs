@@ -1,7 +1,10 @@
 use crate::{
     model::{DisplayMessage, Mode, Model, Overlay},
-    tui::style::{style_input_task, style_task},
-    utils::VectorUtils,
+    tui::{
+        run::KEYBINDS,
+        style::{style_input_task, style_task},
+    },
+    utils::{VectorUtils, key_to_char, mod_to_str},
 };
 use crossterm::{
     execute,
@@ -13,7 +16,7 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListDirection, ListItem, ListState, Paragraph},
 };
 use std::io;
 
@@ -38,6 +41,7 @@ pub fn ui(frame: &mut Frame, model: &Model) {
     }
 
     match model.overlay {
+        Overlay::Help => render_help_overlay(frame, model, available_size),
         Overlay::SelectingFilter => render_overlay_selectingfilter(frame, model, available_size),
         _ => {}
     }
@@ -45,9 +49,96 @@ pub fn ui(frame: &mut Frame, model: &Model) {
     render_taskbar(frame, model, size);
 }
 
-fn render_overlay_selectingfilter(frame: &mut Frame, model: &Model, size: Rect) {}
+fn render_help_overlay(frame: &mut Frame, model: &Model, area: Rect) {
+    // 1) Gather only the bindings for this mode
+    let entries: Vec<_> = KEYBINDS
+        .iter()
+        .filter(|kb| kb.modes.contains(&model.mode))
+        .collect();
+    if entries.is_empty() {
+        panic!("All modes should have at least one keybind...")
+    }
 
-fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
+    // 2) Compute column widths based on the longest key‐string and description
+    let key_max = entries
+        .iter()
+        .map(|kb| {
+            kb.keys
+                .iter()
+                .map(|(k, m)| {
+                    if m.is_empty() {
+                        format!("{}", key_to_char(k))
+                    } else {
+                        format!("{}-{}", mod_to_str(m), key_to_char(k))
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+                .len()
+        })
+        .max()
+        .unwrap_or(0);
+
+    let desc_max = entries
+        .iter()
+        .map(|kb| kb.description.len())
+        .max()
+        .unwrap_or(0);
+
+    // 3) Total popup size: key column + space + desc column + padding + border (2×1)
+    let padding = 2; // one space each side
+    let border = 2; // left + right
+    let width = ((key_max + 3 + desc_max + padding + border) as u16).min(area.width); // never exceed container
+
+    let height = (entries.len() as u16) + 2; // top/bottom border
+
+    // 4) Anchor bottom-right inside `area`
+    let x = area.x + area.width.saturating_sub(width);
+    let y = area.y + area.height.saturating_sub(height);
+    let area = Rect::new(x, y, width, height);
+
+    // 5) Build and render the list
+    let items: Vec<ListItem> = entries
+        .into_iter()
+        .map(|kb| {
+            let keystr = kb
+                .keys
+                .iter()
+                .map(|(k, m)| {
+                    if m.is_empty() {
+                        format!("{}", key_to_char(k))
+                    } else {
+                        format!("{}+{}", mod_to_str(m), key_to_char(k))
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            // pad keystr to key_max, then a space, then description
+            let line = Line::from(vec![
+                Span::raw(format!("{:<key_max$}", keystr, key_max = key_max)),
+                Span::raw("   "),
+                Span::raw(kb.description),
+            ]);
+            ListItem::new(line)
+        })
+        .collect();
+
+    let help = List::new(items)
+        .block(
+            Block::default()
+                .title(" Help ")
+                .borders(Borders::ALL)
+                .style(Style::default().bg(Color::Indexed(237))),
+        )
+        .direction(ListDirection::TopToBottom);
+
+    frame.render_widget(help, area);
+}
+
+fn render_overlay_selectingfilter(frame: &mut Frame, model: &Model, area: Rect) {}
+
+fn render_mode_list(frame: &mut Frame, model: &Model, area: Rect) {
     if model.filtered_tasks.is_empty() {
         if let Overlay::AddingSiblingTask = model.overlay {
             let selected_index = Some(0);
@@ -58,22 +149,22 @@ fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
             let mut selection_state = ListState::default().with_selected(selected_index);
 
             let cursor_x = 4 + 2 * ident + 4 + model.input.cursor as u16;
-            let cursor_y = size.y;
+            let cursor_y = area.y;
             frame.set_cursor(cursor_x, cursor_y);
 
-            frame.render_stateful_widget(list, size, &mut selection_state);
+            frame.render_stateful_widget(list, area, &mut selection_state);
         } else {
             // Step 1: Calculate the dimensions for a centered message
             let message = "Wow so Empty!\nAdd some todos to get started!";
             let message_height = 2; // Adjust this to match the number of lines in the message
-            let y_offset = (size.height / 2).saturating_sub(message_height); // Center vertically
-            let x_offset = size.width / 4; // Adjust for a bit of padding on the sides
+            let y_offset = (area.height / 2).saturating_sub(message_height); // Center vertically
+            let x_offset = area.width / 4; // Adjust for a bit of padding on the sides
 
             // Step 2: Define a centered rectangle for the message
             let centered_rect = Rect::new(
                 x_offset,
                 y_offset,
-                size.width / 2,     // Make the message take half the screen width
+                area.width / 2,     // Make the message take half the screen width
                 message_height * 2, // Approximate height for the message box
             );
 
@@ -149,20 +240,20 @@ fn render_mode_list(frame: &mut Frame, model: &Model, size: Rect) {
             task_list.insert(insertion_index, new_task);
 
             let cursor_x = 4 + 2 * ident + 4 + model.input.cursor as u16;
-            let cursor_y = size.y + insertion_index as u16;
+            let cursor_y = area.y + insertion_index as u16;
             frame.set_cursor(cursor_x, cursor_y);
         }
 
         let list = List::new(task_list).highlight_style(Style::default().bg(Color::Indexed(238)));
         let mut selection_state = ListState::default().with_selected(selected_task_index);
 
-        frame.render_stateful_widget(list, size, &mut selection_state);
+        frame.render_stateful_widget(list, area, &mut selection_state);
     }
 }
 
-fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
-    let info_area = Rect::new(size.x, size.height - STATUS_HEIGHT, size.width, INFO_HEIGHT);
-    let input_area = Rect::new(size.x, size.height - INPUT_HEIGHT, size.width, INPUT_HEIGHT);
+fn render_taskbar(frame: &mut Frame, model: &Model, area: Rect) {
+    let info_area = Rect::new(area.x, area.height - STATUS_HEIGHT, area.width, INFO_HEIGHT);
+    let input_area = Rect::new(area.x, area.height - INPUT_HEIGHT, area.width, INPUT_HEIGHT);
 
     let info_paragraph = Paragraph::new(format!(
         " <{}>",
@@ -177,7 +268,8 @@ fn render_taskbar(frame: &mut Frame, model: &Model, size: Rect) {
         Overlay::None
         | Overlay::SelectingFilter
         | Overlay::AddingSiblingTask
-        | Overlay::AddingChildTask => match model.message.clone() {
+        | Overlay::AddingChildTask
+        | Overlay::Help => match model.message.clone() {
             DisplayMessage::None => Paragraph::new(""),
             DisplayMessage::Success(msg) => Paragraph::new(msg).fg(Color::LightGreen),
             DisplayMessage::Error(msg) => Paragraph::new(msg).fg(Color::LightRed),

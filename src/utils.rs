@@ -1,6 +1,29 @@
+use crossterm::event::{KeyCode, KeyModifiers};
 use rpds::{HashTrieMap, Vector};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
+
+pub fn mod_to_str(modifier: &KeyModifiers) -> &'static str {
+    match *modifier {
+        KeyModifiers::CONTROL => "Ctrl",
+        KeyModifiers::ALT => "Alt",
+        KeyModifiers::SUPER => "Super",
+        _ => todo!(),
+    }
+}
+
+pub fn key_to_char(key: &KeyCode) -> char {
+    match key {
+        KeyCode::Backspace => '⌫',
+        KeyCode::Up => '↑',
+        KeyCode::Down => '↓',
+        KeyCode::Left => '←',
+        KeyCode::Right => '→',
+        KeyCode::Enter => '↵',
+        KeyCode::Char(c) => *c,
+        _ => todo!(),
+    }
+}
 
 #[macro_export]
 macro_rules! persistent_map {
@@ -166,6 +189,16 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
             .filter_map(|key| self.map.get(key))
             .cloned()
             .collect()
+    }
+
+    pub fn merge(&self, other: &Self) -> Self {
+        let mut merged = self.clone();
+
+        for (k, v) in other.iter() {
+            merged = merged.insert(k.clone(), v.clone());
+        }
+
+        merged
     }
 }
 
