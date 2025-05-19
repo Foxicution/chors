@@ -20,6 +20,7 @@ pub fn key_to_char(key: &KeyCode) -> char {
         KeyCode::Left => '←',
         KeyCode::Right => '→',
         KeyCode::Enter => '↵',
+        KeyCode::Char(' ') => '␣',
         KeyCode::Char(c) => *c,
         _ => todo!(),
     }
@@ -58,10 +59,7 @@ pub struct PersistentIndexMap<K: Eq + Hash, V> {
 impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
     // Create a new empty PersistentIndexMap
     pub fn new() -> Self {
-        Self {
-            map: HashTrieMap::new(),
-            order: Vector::new(),
-        }
+        Self { map: HashTrieMap::new(), order: Vector::new() }
     }
 
     // Insert a key-value pair
@@ -70,10 +68,7 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
         if !self.map.contains_key(&key) {
             new_order = new_order.push_back(key.clone()); // Append key to order
         }
-        Self {
-            map: self.map.insert(key, value),
-            order: new_order,
-        }
+        Self { map: self.map.insert(key, value), order: new_order }
     }
 
     /// Inserts a key-value pair at a specific position in the order.
@@ -96,20 +91,14 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
             new_order = new_order.push_back(key.clone());
         }
 
-        Self {
-            map: self.map.insert(key, value),
-            order: new_order,
-        }
+        Self { map: self.map.insert(key, value), order: new_order }
     }
 
     // Remove a key-value pair and preserve relative order
     pub fn remove(&self, key: &K) -> Self {
         if self.map.contains_key(key) {
             let new_order: Vector<K> = self.order.iter().filter(|&k| k != key).cloned().collect();
-            Self {
-                map: self.map.remove(key),
-                order: new_order,
-            }
+            Self { map: self.map.remove(key), order: new_order }
         } else {
             self.clone() // Return current state if key doesn't exist
         }
@@ -125,10 +114,7 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
         new_order = new_order.set(idx1, key2.clone())?;
         new_order = new_order.set(idx2, key1.clone())?;
 
-        Some(Self {
-            map: self.map.clone(),
-            order: new_order,
-        })
+        Some(Self { map: self.map.clone(), order: new_order })
     }
 
     // Get a reference to the value by key
@@ -152,9 +138,7 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
 
     // Get an iterator over the key-value pairs in insertion order
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-        self.order
-            .iter()
-            .filter_map(move |key| self.map.get(key).map(|value| (key, value)))
+        self.order.iter().filter_map(move |key| self.map.get(key).map(|value| (key, value)))
     }
 
     // Get the length of the map
@@ -169,10 +153,7 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
 
     // Clear all elements in the map
     pub fn clear(&self) -> Self {
-        Self {
-            map: HashTrieMap::new(),
-            order: Vector::new(),
-        }
+        Self { map: HashTrieMap::new(), order: Vector::new() }
     }
 
     pub fn keys(&self) -> &Vector<K> {
@@ -184,11 +165,7 @@ impl<K: Eq + Hash + Clone, V: Clone> PersistentIndexMap<K, V> {
     }
 
     pub fn values(&self) -> Vector<V> {
-        self.order
-            .iter()
-            .filter_map(|key| self.map.get(key))
-            .cloned()
-            .collect()
+        self.order.iter().filter_map(|key| self.map.get(key)).cloned().collect()
     }
 
     pub fn merge(&self, other: &Self) -> Self {
@@ -420,11 +397,8 @@ mod tests {
     #[test]
     fn test_from_iter() {
         // Test FromIterator implementation
-        let entries = vec![
-            ("key1".to_string(), 10),
-            ("key2".to_string(), 20),
-            ("key3".to_string(), 30),
-        ];
+        let entries =
+            vec![("key1".to_string(), 10), ("key2".to_string(), 20), ("key3".to_string(), 30)];
         let map: PersistentIndexMap<String, i32> = entries.into_iter().collect();
 
         assert_eq!(map.len(), 3);
