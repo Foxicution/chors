@@ -2,7 +2,7 @@ use crate::{
     model::{DisplayMessage, Mode, Model, Overlay},
     tui::{
         run::KEYBINDS,
-        style::{style_input_task, style_task},
+        style::{style_input_filter, style_input_task, style_task},
     },
     utils::{VectorUtils, key_to_char, mod_to_str},
 };
@@ -13,14 +13,12 @@ use crossterm::{
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
-    layout::{Alignment, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListDirection, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListDirection, ListItem, ListState, Paragraph, Wrap},
 };
 use std::io;
-
-use super::style::style_input_filter;
 
 type Tui = Terminal<CrosstermBackend<io::Stdout>>;
 
@@ -31,10 +29,7 @@ const STATUS_HEIGHT: u16 = INFO_HEIGHT + INPUT_HEIGHT;
 pub fn ui(frame: &mut Frame, model: &Model) {
     let size = frame.size();
     let available_height = size.height.saturating_sub(STATUS_HEIGHT);
-    let available_size = Rect {
-        height: available_height,
-        ..size
-    };
+    let available_size = Rect { height: available_height, ..size };
 
     match model.mode {
         Mode::List => render_mode_list(frame, model, available_size),
@@ -51,10 +46,7 @@ pub fn ui(frame: &mut Frame, model: &Model) {
 
 fn render_help_overlay(frame: &mut Frame, model: &Model, area: Rect) {
     // 1) Gather only the bindings for this mode
-    let entries: Vec<_> = KEYBINDS
-        .iter()
-        .filter(|kb| kb.modes.contains(&model.mode))
-        .collect();
+    let entries: Vec<_> = KEYBINDS.iter().filter(|kb| kb.modes.contains(&model.mode)).collect();
     if entries.is_empty() {
         panic!("All modes should have at least one keybind...")
     }
@@ -79,11 +71,7 @@ fn render_help_overlay(frame: &mut Frame, model: &Model, area: Rect) {
         .max()
         .unwrap_or(0);
 
-    let desc_max = entries
-        .iter()
-        .map(|kb| kb.description.len())
-        .max()
-        .unwrap_or(0);
+    let desc_max = entries.iter().map(|kb| kb.description.len()).max().unwrap_or(0);
 
     // 3) Total popup size: key column + space + desc column + padding + border (2×1)
     let padding = 2; // one space each side
@@ -136,7 +124,42 @@ fn render_help_overlay(frame: &mut Frame, model: &Model, area: Rect) {
     frame.render_widget(help, area);
 }
 
-fn render_overlay_selectingfilter(frame: &mut Frame, model: &Model, area: Rect) {}
+fn render_overlay_selectingfilter(frame: &mut Frame, model: &Model, area: Rect) {
+    let popup_width = (area.width * 80 / 100).min(area.width * 4 / 5);
+    let popup_height = (area.height * 70 / 100).min(area.height * 2 / 3);
+
+    let popup_x = area.x + (area.width.saturating_sub(popup_width)) / 2;
+    let popup_y = area.y + (area.height.saturating_sub(popup_height)) / 2;
+    let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .title("[ Select Filter (Type to search, ↑↓ to navigate, Enter to select, Esc to close) ]")
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL);
+
+    frame.render_widget(block.clone(), popup_area);
+
+    let inner_area = block.inner(popup_area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Min(0)])
+        .split(inner_area);
+
+    frame.set_cursor(chunks[0].x + model.input.cursor as u16, chunks[0].y);
+    frame.render_widget(model.input.text.clone(), chunks[0]);
+
+    frame.render_widget("─".repeat(chunks[1].width as usize), chunks[1]);
+
+    let items: Vec<ListItem> =
+        model.filters.iter().map(|(_, filter)| ListItem::new(filter.name.clone())).collect();
+
+    let list = List::new(items);
+    let mut list_state = ListState::default().with_selected(Some(0));
+
+    frame.render_stateful_widget(list, chunks[2], &mut list_state);
+}
 
 fn render_mode_list(frame: &mut Frame, model: &Model, area: Rect) {
     if model.filtered_tasks.is_empty() {
@@ -257,10 +280,7 @@ fn render_taskbar(frame: &mut Frame, model: &Model, area: Rect) {
 
     let info_paragraph = Paragraph::new(format!(
         " <{}>",
-        model
-            .get_selected_filter()
-            .map(|f| f.name.as_str())
-            .unwrap_or("")
+        model.get_selected_filter().map(|f| f.name.as_str()).unwrap_or("")
     ))
     .bg(Color::Indexed(239));
 
@@ -298,13 +318,7 @@ fn new_task_list_item(model: &Model) -> (u16, ListItem) {
         .selected_task
         .map(|id| model.filtered_tasks.get(&id))
         .map(|path| path.unwrap().len())
-        .map(|len| {
-            if let Overlay::AddingChildTask = model.overlay {
-                len + 1
-            } else {
-                len
-            }
-        })
+        .map(|len| if let Overlay::AddingChildTask = model.overlay { len + 1 } else { len })
         .unwrap_or(0);
 
     let mut line_spans = vec![
@@ -316,9 +330,7 @@ fn new_task_list_item(model: &Model) -> (u16, ListItem) {
         if span.style == Style::default() {
             Span::styled(
                 span.content,
-                Style::default()
-                    .fg(Color::LightGreen)
-                    .add_modifier(Modifier::ITALIC),
+                Style::default().fg(Color::LightGreen).add_modifier(Modifier::ITALIC),
             )
         } else {
             Span::styled(span.content, span.style.add_modifier(Modifier::ITALIC))
