@@ -1,5 +1,5 @@
 use crate::{
-    model::{Filter, Form, Mode, Model, Overlay, Task},
+    model::{Field, Filter, Mode, Model, Overlay, Task},
     tui::{
         cli::build_cli,
         errors::install_hooks,
@@ -12,7 +12,6 @@ use color_eyre::Result;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers, poll, read};
 use ratatui::{Terminal, backend::Backend};
 use std::{
-    collections::HashMap,
     env, fs,
     path::{Path, PathBuf},
     time::Duration,
@@ -81,6 +80,36 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut model: Model) -> Result<M
             }
             _ => {}
         }
+    }
+}
+
+/// Handles common text input key events and returns a `Message` if applicable.
+/// This function deals with actions that modify the `Input` state.
+fn handle_text_input_event(
+    input_state: &Field,
+    key_code: KeyCode,
+    modifiers: KeyModifiers,
+) -> Option<Message> {
+    match key_code {
+        KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Message::SetInput(input_state.with_popped_word()))
+        }
+        KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Message::SetInput(input_state.with_popped_word()))
+        }
+        KeyCode::Backspace => Some(Message::SetInput(input_state.with_popped_char())),
+        KeyCode::Left if modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Message::SetInput(input_state.with_cursor_jump_word(&Direction::Up)))
+        }
+        KeyCode::Right if modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Message::SetInput(input_state.with_cursor_jump_word(&Direction::Down)))
+        }
+        KeyCode::Left => Some(Message::SetInput(input_state.with_cursor_move(&Direction::Up))),
+        KeyCode::Right => Some(Message::SetInput(input_state.with_cursor_move(&Direction::Down))),
+        KeyCode::Home => Some(Message::SetInput(input_state.with_cursor(0))),
+        KeyCode::End => Some(Message::SetInput(input_state.with_cursor(input_state.text.len()))),
+        KeyCode::Char(ch) => Some(Message::SetInput(input_state.with_inserted_char(ch))),
+        _ => None, // Not a generic text input key
     }
 }
 
@@ -192,7 +221,8 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
         },
         Overlay::SelectingFilter => match key {
             KeyCode::Char(ch) if ch.is_ascii_digit() => return None,
-            _ => return None,
+            KeyCode::Esc => Message::SetOverlay(Overlay::None),
+            _ => handle_text_input_event(&model.input, key, modifiers)?,
         },
         Overlay::AddingSiblingTask
         | Overlay::AddingChildTask
@@ -210,26 +240,7 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
                     _ => unreachable!(),
                 }
             }
-            KeyCode::Backspace if modifiers.contains(KeyModifiers::CONTROL) => {
-                Message::SetInput(model.input.with_popped_word())
-            }
-            KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
-                Message::SetInput(model.input.with_popped_word())
-            }
-            KeyCode::Backspace => Message::SetInput(model.input.with_popped_char()),
-            KeyCode::Left if modifiers.contains(KeyModifiers::CONTROL) => {
-                Message::SetInput(model.input.with_cursor_jump_word(&Direction::Up))
-            }
-            KeyCode::Right if modifiers.contains(KeyModifiers::CONTROL) => {
-                Message::SetInput(model.input.with_cursor_jump_word(&Direction::Down))
-            }
-            KeyCode::Left => Message::SetInput(model.input.with_cursor_move(&Direction::Up)),
-            KeyCode::Right => Message::SetInput(model.input.with_cursor_move(&Direction::Down)),
-            KeyCode::Home => Message::SetInput(model.input.with_cursor(0)),
-            KeyCode::End => Message::SetInput(model.input.with_cursor(model.input.text.len())),
-            KeyCode::Char(ch) => Message::SetInput(model.input.with_inserted_char(ch)),
-            KeyCode::Esc => Message::SetOverlay(Overlay::None),
-            _ => return None,
+            _ => handle_text_input_event(&model.input, key, modifiers)?,
         },
     };
 
