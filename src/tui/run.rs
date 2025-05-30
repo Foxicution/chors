@@ -240,6 +240,7 @@ fn keycode_to_message(model: &Model, key: KeyCode, modifiers: KeyModifiers) -> O
                     _ => unreachable!(),
                 }
             }
+            KeyCode::Esc => Message::SetOverlay(Overlay::None),
             _ => handle_text_input_event(&model.input, key, modifiers)?,
         },
     };
